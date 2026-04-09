@@ -5,6 +5,8 @@ import { notFound } from "next/navigation";
 import { ChevronRight, MapPin, Calendar, Clock, Ticket, Share2, ExternalLink } from "lucide-react";
 import { getEventBySlug, getAllEventSlugs } from "@/lib/supabase/queries";
 import { formatTime, formatPrice, formatEventDate, availLabel, availClasses, placeholderImage } from "@/lib/utils";
+import { getLang } from "@/lib/i18n/server";
+import { createT } from "@/lib/i18n/translations";
 
 export const revalidate = 60;
 
@@ -19,6 +21,8 @@ export default async function EventDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id: slug } = await params;
+  const lang = await getLang();
+  const t = createT(lang);
   const event = await getEventBySlug(slug);
 
   if (!event) notFound();
@@ -26,7 +30,21 @@ export default async function EventDetailPage({
   const venue = event.venue;
   const genres = event.genres;
   const artists = event.artists; // sorted by billing_order ascending (0 = headliner)
-  const headliner = artists[0];
+
+  // Language-aware field helpers
+  const eventTitle = (lang === 'ja' && event.title_ja) ? event.title_ja : event.title_en;
+  const eventDesc = (lang === 'ja' && event.description_ja) ? event.description_ja : event.description_en;
+  const artistName = (a: { name_en: string; name_ja: string | null }) =>
+    (lang === 'ja' && a.name_ja) ? a.name_ja : a.name_en;
+  const venueName = venue
+    ? (lang === 'ja' ? `${venue.name_ja} / ${venue.name_en}` : `${venue.name_en} / ${venue.name_ja}`)
+    : '—';
+
+  const billingLabel = (i: number, total: number) => {
+    if (i === 0) return t('event_headliner');
+    if (i === total - 1) return t('event_support');
+    return t('event_specialGuest');
+  };
 
   return (
     <>
@@ -36,14 +54,14 @@ export default async function EventDetailPage({
         {/* ── Breadcrumb ──────────────────────────────────────────────────── */}
         <div className="hidden md:flex items-center justify-between px-8 py-4 border-b border-outline-variant bg-surface-container-lowest">
           <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-outline">
-            <Link href="/" className="hover:text-primary transition-colors">ROOT</Link>
+            <Link href="/" className="hover:text-primary transition-colors">{t('breadcrumb_root')}</Link>
             <ChevronRight className="w-3 h-3" />
-            <Link href="/search" className="hover:text-primary transition-colors">EVENTS</Link>
+            <Link href="/search" className="hover:text-primary transition-colors">{t('breadcrumb_events')}</Link>
             <ChevronRight className="w-3 h-3" />
             <span className="text-primary truncate max-w-[200px]">{event.slug.toUpperCase()}</span>
           </div>
           <div className="text-[10px] font-mono text-outline uppercase tracking-widest">
-            STATUS: [{availLabel(event.availability)}]
+            {t('common_status')}: [{availLabel(event.availability)}]
           </div>
         </div>
 
@@ -51,7 +69,7 @@ export default async function EventDetailPage({
         <section className="relative w-full aspect-[16/9] md:aspect-[21/9] bg-surface-container-highest border-b border-outline-variant">
           <Image
             src={placeholderImage(event.slug, 1400, 600)}
-            alt={event.title_en}
+            alt={eventTitle}
             fill
             className="object-cover grayscale contrast-125 mix-blend-luminosity opacity-60"
             unoptimized
@@ -62,7 +80,7 @@ export default async function EventDetailPage({
             <div className="flex flex-wrap gap-2 mb-3 md:mb-4">
               {event.is_featured && (
                 <span className="bg-primary text-on-primary font-headline font-bold text-[10px] px-2 py-1 uppercase tracking-widest">
-                  FEATURED
+                  {t('home_featured')}
                 </span>
               )}
               {genres.map((g) => (
@@ -72,11 +90,11 @@ export default async function EventDetailPage({
               ))}
             </div>
             <h1 className="text-4xl md:text-6xl lg:text-7xl font-black font-headline tracking-tighter uppercase leading-none text-on-background mb-2">
-              {event.title_en}
+              {eventTitle}
             </h1>
             {artists.length > 0 && (
               <p className="text-lg md:text-2xl font-bold font-headline text-on-surface-variant uppercase tracking-tight">
-                {artists.map((a) => a.name_en).join(" / ")}
+                {artists.map((a) => artistName(a)).join(" / ")}
               </p>
             )}
           </div>
@@ -92,7 +110,7 @@ export default async function EventDetailPage({
             <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 divide-outline-variant border-b border-outline-variant bg-surface-container-low">
               <div className="p-4 flex flex-col gap-1">
                 <span className="text-[10px] font-mono text-primary uppercase tracking-widest flex items-center gap-1">
-                  <Calendar className="w-3 h-3" /> DATE
+                  <Calendar className="w-3 h-3" /> {t('event_date')}
                 </span>
                 <span className="font-headline font-bold text-sm uppercase">
                   {formatEventDate(event.event_date)}
@@ -100,40 +118,40 @@ export default async function EventDetailPage({
               </div>
               <div className="p-4 flex flex-col gap-1">
                 <span className="text-[10px] font-mono text-primary uppercase tracking-widest flex items-center gap-1">
-                  <Clock className="w-3 h-3" /> TIME
+                  <Clock className="w-3 h-3" /> {t('event_time')}
                 </span>
                 <span className="font-headline font-bold text-sm uppercase">
-                  OPEN {formatTime(event.doors_time)} / START {formatTime(event.start_time)}
+                  {t('event_open')} {formatTime(event.doors_time)} / {t('event_start')} {formatTime(event.start_time)}
                 </span>
               </div>
               <div className="p-4 flex flex-col gap-1">
                 <span className="text-[10px] font-mono text-primary uppercase tracking-widest flex items-center gap-1">
-                  <MapPin className="w-3 h-3" /> VENUE
+                  <MapPin className="w-3 h-3" /> {t('event_venue')}
                 </span>
                 <span className="font-headline font-bold text-sm uppercase">
-                  {venue ? `${venue.name_en} / ${venue.name_ja}` : "—"}
+                  {venueName}
                 </span>
               </div>
               <div className="p-4 flex flex-col gap-1">
                 <span className="text-[10px] font-mono text-primary uppercase tracking-widest flex items-center gap-1">
-                  <Ticket className="w-3 h-3" /> PRICE
+                  <Ticket className="w-3 h-3" /> {t('event_price')}
                 </span>
                 <span className="font-headline font-bold text-sm uppercase">
                   {event.ticket_price_adv
-                    ? `ADV ${formatPrice(event.ticket_price_adv)} / DOOR ${formatPrice(event.ticket_price_door)}`
-                    : "FREE ENTRY"}
+                    ? `${t('common_adv')} ${formatPrice(event.ticket_price_adv)} / DOOR ${formatPrice(event.ticket_price_door)}`
+                    : t('event_freeEntry')}
                 </span>
               </div>
             </div>
 
             {/* Description */}
-            {event.description_en && (
+            {eventDesc && (
               <div className="p-6 md:p-8 border-b border-outline-variant">
                 <h3 className="font-headline font-black text-xl tracking-tighter uppercase mb-4 text-primary">
-                  EVENT DETAILS / イベント詳細
+                  {t('event_details')} / {lang === 'en' ? 'イベント詳細' : 'EVENT DETAILS'}
                 </h3>
                 <div className="prose prose-invert prose-p:font-body prose-p:text-on-surface-variant prose-p:leading-relaxed prose-p:text-sm max-w-none">
-                  {event.description_en.split("\n").map((para, i) => (
+                  {eventDesc.split("\n").map((para, i) => (
                     <p key={i}>{para}</p>
                   ))}
                 </div>
@@ -144,7 +162,7 @@ export default async function EventDetailPage({
             {artists.length > 0 && (
               <div className="p-6 md:p-8 border-b border-outline-variant bg-surface-container-lowest">
                 <h3 className="font-headline font-black text-xl tracking-tighter uppercase mb-6 text-primary">
-                  LINEUP / 出演者
+                  {t('event_lineup')} / {lang === 'en' ? '出演者' : 'LINEUP'}
                 </h3>
                 <div className="flex flex-col gap-4">
                   {artists.map((artist, i) => (
@@ -152,7 +170,7 @@ export default async function EventDetailPage({
                       <div className="w-16 h-16 bg-surface-container-highest relative overflow-hidden shrink-0">
                         <Image
                           src={placeholderImage(artist.slug, 200, 200)}
-                          alt={artist.name_en}
+                          alt={artistName(artist)}
                           fill
                           className="object-cover grayscale group-hover:grayscale-0 transition-all"
                           unoptimized
@@ -160,10 +178,10 @@ export default async function EventDetailPage({
                       </div>
                       <div className="flex-1 border-b border-outline-variant pb-4 group-hover:border-primary transition-colors">
                         <h4 className="font-headline font-bold text-2xl uppercase tracking-tight group-hover:text-primary transition-colors">
-                          {artist.name_en}
+                          {artistName(artist)}
                         </h4>
                         <p className="font-mono text-[10px] text-outline uppercase tracking-widest">
-                          {i === 0 ? "HEADLINER" : i === artists.length - 1 ? "SUPPORT" : "SPECIAL GUEST"}
+                          {billingLabel(i, artists.length)}
                         </p>
                       </div>
                       <ChevronRight className="w-6 h-6 text-outline group-hover:text-primary transition-colors" />
@@ -176,7 +194,7 @@ export default async function EventDetailPage({
             {/* Timetable */}
             <div className="p-6 md:p-8">
               <h3 className="font-headline font-black text-xl tracking-tighter uppercase mb-6 text-primary">
-                TIMETABLE / タイムテーブル
+                {t('event_timetable')} / {lang === 'en' ? 'タイムテーブル' : 'TIMETABLE'}
               </h3>
               <div className="relative border-l-2 border-outline-variant ml-4 md:ml-8 flex flex-col gap-8 pb-4">
                 {/* Doors open */}
@@ -185,17 +203,17 @@ export default async function EventDetailPage({
                   <p className="font-mono text-xs text-primary font-bold mb-1">
                     {formatTime(event.doors_time)}
                   </p>
-                  <p className="font-headline font-bold uppercase">DOORS OPEN</p>
+                  <p className="font-headline font-bold uppercase">{t('event_doorsOpen')}</p>
                 </div>
                 {/* Artists in billing order */}
                 {artists.map((artist, i) => (
                   <div key={artist.slug} className="relative pl-6">
                     <div className={`absolute w-3 h-3 rounded-full -left-[7.5px] top-1.5 ${i === 0 ? "bg-primary shadow-[0_0_10px_rgba(242,202,80,0.5)]" : "bg-outline-variant"}`} />
                     <p className={`font-mono text-xs mb-1 font-bold ${i === 0 ? "text-primary" : "text-outline"}`}>
-                      {i === 0 ? "HEADLINER" : `SUPPORT ${i}`}
+                      {billingLabel(i, artists.length)}
                     </p>
                     <p className={`font-headline font-bold uppercase ${i === 0 ? "text-2xl text-primary font-black" : "text-lg"}`}>
-                      {artist.name_en}
+                      {artistName(artist)}
                     </p>
                   </div>
                 ))}
@@ -217,7 +235,7 @@ export default async function EventDetailPage({
                 {event.ticket_price_adv && (
                   <div className="flex justify-between items-end mb-6">
                     <div>
-                      <p className="text-[10px] font-mono text-outline uppercase mb-1">ADVANCE TICKET</p>
+                      <p className="text-[10px] font-mono text-outline uppercase mb-1">{t('event_advTicket')}</p>
                       <p className="font-headline font-black text-4xl leading-none">
                         {formatPrice(event.ticket_price_adv)}
                       </p>
@@ -238,7 +256,7 @@ export default async function EventDetailPage({
                     className="w-full bg-primary text-on-primary font-headline font-black py-4 text-lg uppercase tracking-widest hover:bg-primary-container active:scale-[0.98] transition-all flex items-center justify-center gap-2 mb-4"
                   >
                     <Ticket className="w-5 h-5" />
-                    RESERVE TICKET
+                    {t('event_reserveTicket')}
                   </a>
                 ) : (
                   <button
@@ -246,12 +264,12 @@ export default async function EventDetailPage({
                     className="w-full bg-surface-container-highest text-outline font-headline font-black py-4 text-lg uppercase tracking-widest flex items-center justify-center gap-2 mb-4 cursor-not-allowed"
                   >
                     <Ticket className="w-5 h-5" />
-                    {event.availability === "sold_out" ? "SOLD OUT" : "TICKETS AT DOOR"}
+                    {event.availability === "sold_out" ? t('event_soldOut') : t('event_ticketsAtDoor')}
                   </button>
                 )}
 
                 <p className="text-[10px] font-mono text-outline-variant text-center uppercase">
-                  RESERVATIONS CLOSE AT 15:00 ON THE DAY OF THE EVENT.
+                  {t('event_reserveNote')}
                 </p>
               </div>
 
@@ -259,7 +277,7 @@ export default async function EventDetailPage({
               {venue && (
                 <div className="p-6 md:p-8 border-b border-outline-variant">
                   <h3 className="font-headline font-black text-sm tracking-widest uppercase mb-4 text-outline">
-                    VENUE INFORMATION
+                    {t('event_venueInfo')}
                   </h3>
                   <div className="flex items-start gap-4 mb-6">
                     <div className="w-12 h-12 bg-surface-container-highest flex items-center justify-center shrink-0">
@@ -270,7 +288,7 @@ export default async function EventDetailPage({
                         href={`/venues/${venue.slug}`}
                         className="font-headline font-bold text-lg uppercase leading-tight hover:text-primary transition-colors"
                       >
-                        {venue.name_en} / {venue.name_ja}
+                        {venueName}
                       </Link>
                       {venue.address_en && (
                         <p className="font-mono text-[10px] text-outline uppercase mt-1">{venue.address_en}</p>
@@ -289,7 +307,7 @@ export default async function EventDetailPage({
                     />
                     <div className="absolute inset-0 flex items-center justify-center">
                       <span className="bg-background/80 px-3 py-1 font-headline font-bold text-xs uppercase tracking-widest border border-outline-variant flex items-center gap-2">
-                        OPEN IN MAPS <ExternalLink className="w-3 h-3" />
+                        {t('event_openInMaps')} <ExternalLink className="w-3 h-3" />
                       </span>
                     </div>
                   </div>
@@ -301,7 +319,7 @@ export default async function EventDetailPage({
                       rel="noopener noreferrer"
                       className="flex-1 border border-outline-variant py-2 font-headline font-bold text-[10px] uppercase tracking-widest hover:bg-surface-container transition-colors text-center block"
                     >
-                      VENUE WEBSITE
+                      {t('event_venueWebsite')}
                     </a>
                   )}
                 </div>
@@ -310,7 +328,7 @@ export default async function EventDetailPage({
               {/* Share */}
               <div className="p-6 md:p-8 flex items-center justify-between">
                 <span className="font-headline font-bold text-xs uppercase tracking-widest text-outline">
-                  SHARE EVENT
+                  {t('event_shareEvent')}
                 </span>
                 <button className="text-outline hover:text-primary transition-colors">
                   <Share2 className="w-5 h-5" />

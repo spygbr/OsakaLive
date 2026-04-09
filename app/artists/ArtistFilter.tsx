@@ -6,12 +6,14 @@ import { Search, Filter } from "lucide-react";
 import { useState, useMemo } from "react";
 import type { ArtistWithGenre } from "@/lib/supabase/queries";
 import { placeholderImage } from "@/lib/utils";
+import { useLang } from "@/lib/i18n/LangProvider";
 
 const LETTERS = ["ALL", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ".split(""), "#"];
 
 export function ArtistFilter({ artists }: { artists: ArtistWithGenre[] }) {
   const [query, setQuery] = useState("");
   const [activeLetter, setActiveLetter] = useState("ALL");
+  const { t, lang } = useLang();
 
   const filtered = useMemo(() => {
     return artists.filter((a) => {
@@ -41,6 +43,11 @@ export function ArtistFilter({ artists }: { artists: ArtistWithGenre[] }) {
     setActiveLetter("ALL");
   }
 
+  const artistDisplayName = (a: ArtistWithGenre) =>
+    lang === 'ja' && a.name_ja ? a.name_ja : a.name_en;
+  const artistSubName = (a: ArtistWithGenre) =>
+    lang === 'ja' ? a.name_en : (a.name_ja ?? null);
+
   return (
     <>
       {/* ── Search/Filter Bar ────────────────────────────────────────────── */}
@@ -51,7 +58,7 @@ export function ArtistFilter({ artists }: { artists: ArtistWithGenre[] }) {
             type="text"
             value={query}
             onChange={(e) => handleSearch(e.target.value)}
-            placeholder="SEARCH ARTISTS..."
+            placeholder={t('artists_searchPlaceholder')}
             className="w-full bg-surface-container-lowest border border-outline-variant text-on-surface font-mono text-xs py-2 pl-9 pr-3 focus:outline-none focus:border-primary uppercase placeholder:text-outline-variant"
           />
         </div>
@@ -80,7 +87,7 @@ export function ArtistFilter({ artists }: { artists: ArtistWithGenre[] }) {
                   : "text-outline hover:text-primary hover:bg-surface-container"
               }`}
             >
-              {letter}
+              {letter === "ALL" ? t('sidebar_all') : letter}
             </button>
           ))}
         </div>
@@ -91,7 +98,7 @@ export function ArtistFilter({ artists }: { artists: ArtistWithGenre[] }) {
         {filtered.length === 0 ? (
           <div className="py-16 text-center">
             <p className="text-outline font-mono text-sm uppercase tracking-widest">
-              No artists found.
+              {t('artists_noResults')}
             </p>
           </div>
         ) : (
@@ -109,11 +116,11 @@ export function ArtistFilter({ artists }: { artists: ArtistWithGenre[] }) {
                   <div className="absolute inset-0 bg-primary/0 group-hover:bg-primary/10 transition-colors" />
                 </div>
                 <h3 className="font-headline font-bold text-lg uppercase tracking-tight group-hover:text-primary transition-colors leading-tight mb-1">
-                  {artist.name_en}
+                  {artistDisplayName(artist)}
                 </h3>
-                {artist.name_ja && (
+                {artistSubName(artist) && (
                   <p className="font-mono text-[10px] text-outline-variant mb-0.5">
-                    {artist.name_ja}
+                    {artistSubName(artist)}
                   </p>
                 )}
                 <p className="font-mono text-[10px] text-outline uppercase tracking-widest">
@@ -125,7 +132,7 @@ export function ArtistFilter({ artists }: { artists: ArtistWithGenre[] }) {
         )}
 
         <div className="mt-8 text-center font-mono text-[10px] text-outline uppercase tracking-widest">
-          {filtered.length} / {artists.length} ARTISTS
+          {filtered.length} / {artists.length} {t('breadcrumb_artists')}
         </div>
       </section>
     </>

@@ -2,56 +2,119 @@ import { Sidebar } from "@/components/Sidebar";
 import Image from "next/image";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
-import { getAllUpcomingEvents } from "@/lib/supabase/queries";
-import { formatPrice, formatTime, formatEventDate, availLabel, availClasses, placeholderImage } from "@/lib/utils";
+import {
+  getFilteredEvents,
+  getAreas,
+  getGenres,
+  type FilterParams,
+} from "@/lib/supabase/queries";
+import {
+  formatPrice,
+  formatTime,
+  formatEventDate,
+  availLabel,
+  availClasses,
+  placeholderImage,
+} from "@/lib/utils";
+import { getLang } from "@/lib/i18n/server";
+import { createT } from "@/lib/i18n/translations";
 
 export const revalidate = 60;
 
-export default async function SearchPage() {
-  const events = await getAllUpcomingEvents(50);
+type SearchPageProps = {
+  searchParams: Promise<{
+    area?: string;
+    genre?: string;
+    date_from?: string;
+    date_to?: string;
+    price?: string;
+  }>;
+};
+
+export default async function SearchPage({ searchParams }: SearchPageProps) {
+  const params = await searchParams;
+  const lang = await getLang();
+  const t = createT(lang);
+
+  const filters: FilterParams = {
+    area: params.area || undefined,
+    genre: params.genre || undefined,
+    dateFrom: params.date_from || undefined,
+    dateTo: params.date_to || undefined,
+    price:
+      params.price === "free" ? "free"
+      : params.price === "paid" ? "paid"
+      : undefined,
+  };
+
+  const [events, areas, genres] = await Promise.all([
+    getFilteredEvents(filters, 50),
+    getAreas(),
+    getGenres(),
+  ]);
+
+  const hasFilters = Object.values(filters).some(Boolean);
+
+  const eventTitle = (ev: { title_en: string; title_ja: string | null }) =>
+    (lang === 'ja' && ev.title_ja) ? ev.title_ja : ev.title_en;
+  const venueName = (v: { name_en: string; name_ja: string } | null) =>
+    v ? (lang === 'ja' ? `${v.name_ja}` : v.name_en) : '—';
 
   return (
     <>
-      <Sidebar />
+      <Sidebar areas={areas} genres={genres} />
       <main className="flex-1 bg-surface-dim pb-20 md:pb-0">
 
         {/* ── Breadcrumb ──────────────────────────────────────────────────── */}
         <div className="hidden md:flex items-center justify-between px-8 py-4 border-b border-outline-variant bg-surface-container-lowest">
           <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-outline">
-            <Link href="/" className="hover:text-primary transition-colors">ROOT</Link>
+            <Link href="/" className="hover:text-primary transition-colors">{t('breadcrumb_root')}</Link>
             <ChevronRight className="w-3 h-3" />
-            <span className="text-primary">EVENTS ({events.length})</span>
+            <span className="text-primary">
+              {t('breadcrumb_events')} ({events.length}){hasFilters ? ` ${t('breadcrumb_filtered')}` : ""}
+            </span>
           </div>
           <div className="text-[10px] font-mono text-outline uppercase tracking-widest">
-            SORT: [DATE_ASC]
+            {t('search_sortDate')}
           </div>
         </div>
 
         {/* ── Header ──────────────────────────────────────────────────────── */}
         <section className="p-4 md:p-8 border-b border-outline-variant bg-surface-container">
           <h1 className="text-3xl md:text-5xl font-black font-headline tracking-tighter uppercase leading-none">
-            UPCOMING SHOWS / <br className="hidden md:block" />
-            <span className="text-primary">ライブスケジュール</span>
+            {t('search_heading')} / <br className="hidden md:block" />
+            <span className="text-primary">{t('search_subheading')}</span>
           </h1>
           <p className="mt-4 text-on-surface-variant font-mono text-xs max-w-2xl leading-relaxed uppercase">
-            ARCHIVING {events.length} UPCOMING EVENT{events.length !== 1 ? "S" : ""} IN THE GREATER OSAKA METROPOLITAN AREA.
-            ALL TIMES JST.
+            {hasFilters
+              ? `${events.length} ${t('search_filtered')}`
+              : `${t('search_archiving').replace('UPCOMING EVENTS', `${events.length} UPCOMING EVENT${events.length !== 1 ? 'S' : ''}`)}`}
           </p>
         </section>
 
         {/* ── Event List ──────────────────────────────────────────────────── */}
         {events.length === 0 ? (
           <div className="p-16 text-center">
-            <p className="text-outline font-mono text-sm uppercase tracking-widest">No upcoming events found.</p>
+            <p className="text-outline font-mono text-sm uppercase tracking-widest">
+              {hasFilters ? t('search_noMatch') : t('search_noEvents')}
+            </p>
+            {hasFilters && (
+              <Link
+                href="/search"
+                className="mt-4 inline-block text-[10px] font-mono text-primary hover:underline uppercase tracking-widest"
+              >
+                {t('search_clearFilters')}
+              </Link>
+            )}
           </div>
         ) : (
           <section className="divide-y divide-outline-variant border-b border-outline-variant">
             {events.map((event) => {
               const venue = event.venue;
-              const genres = event.genres;
+              const eventGenres = event.genres;
               const priceDisplay = event.ticket_price_adv
                 ? `${formatPrice(event.ticket_price_adv)}${event.drink_charge ? " (+1 DRINK)" : ""}`
-                : "FREE";
+                : lang === 'ja' ? "無料" : "FREE";
 
               return (
                 <div
@@ -62,7 +125,7 @@ export default async function SearchPage() {
                   <div className="md:w-48 shrink-0 relative aspect-[16/9] md:aspect-square overflow-hidden border-b md:border-b-0 md:border-r border-outline-variant">
                     <Image
                       src={placeholderImage(event.slug, 400, 400)}
-                      alt={event.title_en}
+                      alt={eventTitle(event)}
                       fill
                       className="object-cover grayscale group-hover:grayscale-0 transition-all duration-500"
                       unoptimized
@@ -78,17 +141,17 @@ export default async function SearchPage() {
                     <div className="md:col-span-5">
                       {venue && (
                         <div className="text-[10px] text-primary font-bold uppercase tracking-widest mb-1">
-                          LIVE HOUSE: {venue.name_en}{venue.name_ja ? ` / ${venue.name_ja}` : ""}
+                          {t('search_liveHouse')}: {venueName(venue)}{venue.name_ja && lang === 'en' ? ` / ${venue.name_ja}` : ''}
                         </div>
                       )}
                       <Link href={`/event/${event.slug}`}>
                         <h2 className="text-xl md:text-2xl font-bold font-headline tracking-tight uppercase group-hover:text-primary transition-colors">
-                          {event.title_en}
+                          {eventTitle(event)}
                         </h2>
                       </Link>
-                      {genres.length > 0 && (
+                      {eventGenres.length > 0 && (
                         <div className="flex flex-wrap gap-2 mt-2">
-                          {genres.map((g) => (
+                          {eventGenres.map((g) => (
                             <span
                               key={g.slug}
                               className="text-[9px] px-1 border border-outline text-outline uppercase"
@@ -103,8 +166,8 @@ export default async function SearchPage() {
                     {/* Time + price */}
                     <div className="md:col-span-3 font-mono text-xs uppercase leading-tight text-on-surface-variant flex md:block justify-between items-center">
                       <div>
-                        {event.doors_time && <div>OPEN: {formatTime(event.doors_time)}</div>}
-                        {event.start_time && <div>START: {formatTime(event.start_time)}</div>}
+                        {event.doors_time && <div>{t('event_open')}: {formatTime(event.doors_time)}</div>}
+                        {event.start_time && <div>{t('event_start')}: {formatTime(event.start_time)}</div>}
                       </div>
                       <div className="md:mt-2 text-primary font-bold">{priceDisplay}</div>
                     </div>
@@ -122,7 +185,7 @@ export default async function SearchPage() {
                             : "border-primary text-primary hover:bg-primary hover:text-on-primary"
                         }`}
                       >
-                        VIEW DETAILS / 詳細
+                        {t('search_viewDetails')} / {lang === 'en' ? '詳細' : 'Details'}
                       </Link>
                     </div>
                   </div>

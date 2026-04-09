@@ -1,8 +1,9 @@
 import { Sidebar } from "@/components/Sidebar";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
-import { getEventsForMonth } from "@/lib/supabase/queries";
+import { getEventsForMonth, getAreas, getGenres } from "@/lib/supabase/queries";
 import type { EventWithVenue } from "@/lib/supabase/queries";
+import { getLang } from "@/lib/i18n/server";
 
 export const revalidate = 60;
 
@@ -65,7 +66,13 @@ function chipTextClasses(availability: string): string {
 export default async function CalendarPage({
   searchParams,
 }: {
-  searchParams: Promise<{ year?: string; month?: string }>;
+  searchParams: Promise<{
+    year?: string;
+    month?: string;
+    area?: string;
+    genre?: string;
+    price?: string;
+  }>;
 }) {
   const params = await searchParams;
   const today = getTodayJST();
@@ -73,7 +80,21 @@ export default async function CalendarPage({
   const year = params.year ? parseInt(params.year) : today.year;
   const month = params.month ? parseInt(params.month) : today.month;
 
-  const events = await getEventsForMonth(year, month);
+  const calendarFilters = {
+    area: params.area || undefined,
+    genre: params.genre || undefined,
+    price: (params.price === "free" ? "free" : params.price === "paid" ? "paid" : undefined) as
+      | "free"
+      | "paid"
+      | undefined,
+  };
+
+  const [events, areas, genres, lang] = await Promise.all([
+    getEventsForMonth(year, month, calendarFilters),
+    getAreas(),
+    getGenres(),
+    getLang(),
+  ]);
 
   // Group events by day number
   const eventsByDay = new Map<number, EventWithVenue[]>();
@@ -95,19 +116,40 @@ export default async function CalendarPage({
 
   // Build ticker text from real sold-out events this month
   const soldOut = events.filter((e) => e.availability === "sold_out");
+  const eventLabel = (e: EventWithVenue) =>
+    lang === 'ja' && (e.artists[0]?.name_ja ?? e.title_ja)
+      ? (e.artists[0]?.name_ja ?? e.title_ja ?? e.title_en)
+      : (e.artists[0]?.name_en ?? e.title_en);
+  const monthLabel = lang === 'ja'
+    ? `${year}年${MONTH_NAMES_JA[month - 1]}`
+    : `${MONTH_NAMES_EN[month - 1]} ${year}`;
   const tickerText =
     soldOut.length > 0
       ? soldOut
           .map(
             (e) =>
-              `SOLD OUT: ${e.artists[0]?.name_en ?? e.title_en} @ ${e.venue?.name_en ?? "—"}`
+              `${lang === 'ja' ? '売り切れ' : 'SOLD OUT'}: ${eventLabel(e)} @ ${lang === 'ja' ? (e.venue?.name_ja ?? e.venue?.name_en ?? '—') : (e.venue?.name_en ?? "—")}`
           )
           .join(" // ") + " // OSAKA LIVE HOUSE ARCHIVE V.2.04 //"
-      : `OSAKA LIVE HOUSE ARCHIVE V.2.04 // ${events.length} EVENTS IN ${MONTH_NAMES_EN[month - 1]} ${year} //`;
+      : `OSAKA LIVE HOUSE ARCHIVE V.2.04 // ${events.length} ${lang === 'ja' ? 'イベント' : 'EVENTS'} ${lang === 'ja' ? 'IN ' : 'IN '}${monthLabel} //`;
+
+  // Build a query-string that preserves active filters for prev/next nav
+  const filterQs = [
+    calendarFilters.area && `area=${calendarFilters.area}`,
+    calendarFilters.genre && `genre=${calendarFilters.genre}`,
+    calendarFilters.price && `price=${calendarFilters.price}`,
+  ]
+    .filter(Boolean)
+    .join("&");
+
+  function monthHref(y: number, m: number) {
+    const base = `year=${y}&month=${m}`;
+    return `/calendar?${filterQs ? `${base}&${filterQs}` : base}`;
+  }
 
   return (
     <>
-      <Sidebar />
+      <Sidebar areas={areas} genres={genres} />
       <main className="flex-1 flex flex-col bg-surface overflow-hidden relative pb-20 md:pb-0">
 
         {/* ── Header ──────────────────────────────────────────────────────── */}
@@ -126,7 +168,7 @@ export default async function CalendarPage({
 
           <div className="flex gap-[2px]">
             <Link
-              href={`/calendar?year=${prev.year}&month=${prev.month}`}
+              href={monthHref(prev.year, prev.month)}
               className="bg-surface-container-highest p-2 md:p-3 border border-outline-variant hover:bg-primary hover:text-on-primary transition-colors"
               aria-label="Previous month"
             >
@@ -135,15 +177,15 @@ export default async function CalendarPage({
 
             {!isCurrentMonth && (
               <Link
-                href="/calendar"
+                href={filterQs ? `/calendar?${filterQs}` : "/calendar"}
                 className="hidden md:flex items-center bg-surface-container-highest px-3 py-2 border border-outline-variant hover:bg-surface-container text-[9px] font-headline font-bold uppercase tracking-widest transition-colors"
               >
-                TODAY
+                {lang === 'ja' ? '今日' : 'TODAY'}
               </Link>
             )}
 
             <Link
-              href={`/calendar?year=${next.year}&month=${next.month}`}
+              href={monthHref(next.year, next.month)}
               className="bg-surface-container-highest p-2 md:p-3 border border-outline-variant hover:bg-primary hover:text-on-primary transition-colors"
               aria-label="Next month"
             >
@@ -203,8 +245,9 @@ export default async function CalendarPage({
 
                 {/* Event chips (max 3 visible on desktop, 1 on mobile) */}
                 {dayEvents.slice(0, 3).map((event, idx) => {
-                  const label =
-                    event.artists[0]?.name_en ?? event.title_en;
+                  const label = lang === 'ja'
+                    ? (event.artists[0]?.name_ja ?? event.artists[0]?.name_en ?? event.title_ja ?? event.title_en)
+                    : (event.artists[0]?.name_en ?? event.title_en);
                   return (
                     <Link
                       key={event.id}
@@ -220,7 +263,7 @@ export default async function CalendarPage({
                       </span>
                       {event.venue && (
                         <span className="hidden md:block font-mono text-[7px] text-outline truncate uppercase">
-                          {event.venue.name_en}
+                          {lang === 'ja' ? event.venue.name_ja : event.venue.name_en}
                         </span>
                       )}
                     </Link>

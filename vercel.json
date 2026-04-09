@@ -1,3 +1,9 @@
 {
-  "installCommand": "npm install --no-package-lock"
+  "installCommand": "npm install --no-package-lock",
+  "crons": [
+    {
+      "path": "/api/cron/scrape-events",
+      "schedule": "0 17 * * *"
+    }
+  ]
 }
