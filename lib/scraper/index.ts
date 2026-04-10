@@ -75,7 +75,7 @@ async function upsertEvents(
     ticket_price_adv:  r.ticketPriceAdv,
     ticket_price_door: r.ticketPriceDoor,
     ticket_url:        r.ticketUrl,
-    availability:      'available',
+    availability:      'on_sale',
     is_featured:       false,
     description_en:    `Scraped from ${r.sourceUrl}`,
     description_ja:    null,
@@ -90,8 +90,8 @@ async function upsertEvents(
     .select('id')
 
   if (error) {
-    console.error('[scraper:upsert]', error.message)
-    throw error
+    console.error('[scraper:upsert]', error.message ?? JSON.stringify(error))
+    throw new Error(error.message ?? JSON.stringify(error))
   }
   return data?.length ?? 0
 }
@@ -127,7 +127,7 @@ async function scrapeVenue(
     await logRun(supabase, venue.id, venue.slug, 'success', eventsFound, eventsUpserted, undefined, durationMs)
     return { venueSlug: venue.slug, status: 'success', eventsFound, eventsUpserted, durationMs }
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err)
+    const msg = err instanceof Error ? err.message : (typeof err === 'object' ? JSON.stringify(err) : String(err))
     console.error(`[scraper] ✗ ${venue.slug}:`, msg)
     const durationMs = Date.now() - start
     await logRun(supabase, venue.id, venue.slug, 'failed', eventsFound, eventsUpserted, msg, durationMs)
