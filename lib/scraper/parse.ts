@@ -35,14 +35,14 @@ const START_RE = /(?:start|開演|start:|start：)\s*(\d{1,2}:\d{2})/i
 
 // ── Price patterns ────────────────────────────────────────────────────────────
 
-/** ¥3,000 / 3000円 / ¥3000 */
-const PRICE_RE = /[¥￥]?\s*(\d[\d,]+)\s*(?:円|yen)?/gi
+/** ¥3,000 / 3000円 / ¥3000 — requires yen symbol OR 円 suffix to avoid bare numbers */
+const PRICE_RE = /(?:[¥￥]\s*(\d[\d,]+)|(\d[\d,]+)\s*円)/gi
 
 function parsePrice(text: string): number | null {
-  const m = /[¥￥]?\s*(\d[\d,]+)\s*(?:円|yen)?/i.exec(text)
+  const m = /(?:[¥￥]\s*(\d[\d,]+)|(\d[\d,]+)\s*円)/i.exec(text)
   if (!m) return null
-  const n = parseInt(m[1].replace(/,/g, ''), 10)
-  return isNaN(n) ? null : n
+  const n = parseInt((m[1] ?? m[2]).replace(/,/g, ''), 10)
+  return isNaN(n) || n < 500 || n > 30000 ? null : n
 }
 
 // ── Ticket URL ────────────────────────────────────────────────────────────────
@@ -77,7 +77,13 @@ export function parseEventsFromHtml(
     .replace(/\s{2,}/g, ' ')
 
   // Tokenise by line (~paragraphs)
-  const lines = cleaned.split(/\n|。/).map((l) => l.trim()).filter(Boolean)
+  // Note: stripped HTML has no newlines, so also split on 3+ whitespace chars
+  const lines = cleaned
+    .split(/\r?\n|\s{3,}/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0 && l.length < 300)
+
+  console.log(`[parse:${venueSlug}] ${lines.length} lines after tokenize`)
 
   // Sliding window: look for a date line, then gather context
   for (let i = 0; i < lines.length; i++) {
@@ -108,7 +114,7 @@ export function parseEventsFromHtml(
     const prices: number[] = []
     let pm: RegExpExecArray | null
     while ((pm = PRICE_RE.exec(ctx)) !== null && prices.length < 2) {
-      const n = parseInt(pm[1].replace(/,/g, ''), 10)
+      const n = parseInt((pm[1] ?? pm[2]).replace(/,/g, ''), 10)
       if (!isNaN(n) && n >= 500 && n <= 30000) prices.push(n)
     }
 

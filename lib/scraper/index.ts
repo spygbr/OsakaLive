@@ -81,9 +81,13 @@ async function upsertEvents(
     description_ja:    null,
   }))
 
+  // Deduplicate rows by slug before upserting to avoid constraint violations
+  // within the same batch (e.g. two events sharing a date + short title)
+  const uniqueRows = Array.from(new Map(rows.map((r) => [r.slug, r])).values())
+
   const { error, data } = await supabase
     .from('events')
-    .upsert(rows, {
+    .upsert(uniqueRows, {
       onConflict: 'slug',
       ignoreDuplicates: false,
     })
