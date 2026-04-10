@@ -1,4 +1,5 @@
 import { Sidebar } from "@/components/Sidebar";
+import { MobileTicketBar } from "@/components/MobileTicketBar";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -29,39 +30,43 @@ export default async function EventDetailPage({
 
   const venue = event.venue;
   const genres = event.genres;
-  const artists = event.artists; // sorted by billing_order ascending (0 = headliner)
+  const artists = event.artists;
 
-  // Language-aware field helpers
-  const eventTitle = (lang === 'ja' && event.title_ja) ? event.title_ja : event.title_en;
-  const eventDesc = (lang === 'ja' && event.description_ja) ? event.description_ja : event.description_en;
+  const eventTitle = (lang === "ja" && event.title_ja) ? event.title_ja : event.title_en;
+  const eventDesc = (lang === "ja" && event.description_ja) ? event.description_ja : event.description_en;
   const artistName = (a: { name_en: string; name_ja: string | null }) =>
-    (lang === 'ja' && a.name_ja) ? a.name_ja : a.name_en;
+    (lang === "ja" && a.name_ja) ? a.name_ja : a.name_en;
   const venueName = venue
-    ? (lang === 'ja' ? `${venue.name_ja} / ${venue.name_en}` : `${venue.name_en} / ${venue.name_ja}`)
-    : '—';
+    ? (lang === "ja"
+        ? `${venue.name_ja} / ${venue.name_en}`
+        : `${venue.name_en} / ${venue.name_ja}`)
+    : "—";
+  const venueNameShort = venue
+    ? (lang === "ja" ? venue.name_ja : venue.name_en)
+    : "—";
 
   const billingLabel = (i: number, total: number) => {
-    if (i === 0) return t('event_headliner');
-    if (i === total - 1) return t('event_support');
-    return t('event_specialGuest');
+    if (i === 0) return t("event_headliner");
+    if (i === total - 1) return t("event_support");
+    return t("event_specialGuest");
   };
 
   return (
     <>
       <Sidebar />
-      <main className="flex-1 bg-surface-dim pb-20 md:pb-0 overflow-x-hidden">
+      <main className="flex-1 bg-surface-dim pb-32 md:pb-0 overflow-x-hidden">
 
         {/* ── Breadcrumb ──────────────────────────────────────────────────── */}
         <div className="hidden md:flex items-center justify-between px-8 py-4 border-b border-outline-variant bg-surface-container-lowest">
           <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-widest text-outline">
-            <Link href="/" className="hover:text-primary transition-colors">{t('breadcrumb_root')}</Link>
+            <Link href="/" className="hover:text-primary transition-colors">{t("breadcrumb_root")}</Link>
             <ChevronRight className="w-3 h-3" />
-            <Link href="/search" className="hover:text-primary transition-colors">{t('breadcrumb_events')}</Link>
+            <Link href="/search" className="hover:text-primary transition-colors">{t("breadcrumb_events")}</Link>
             <ChevronRight className="w-3 h-3" />
             <span className="text-primary truncate max-w-[200px]">{event.slug.toUpperCase()}</span>
           </div>
           <div className="text-[10px] font-mono text-outline uppercase tracking-widest">
-            {t('common_status')}: [{availLabel(event.availability)}]
+            {t("common_status")}: [{availLabel(event.availability)}]
           </div>
         </div>
 
@@ -80,7 +85,7 @@ export default async function EventDetailPage({
             <div className="flex flex-wrap gap-2 mb-3 md:mb-4">
               {event.is_featured && (
                 <span className="bg-primary text-on-primary font-headline font-bold text-[10px] px-2 py-1 uppercase tracking-widest">
-                  {t('home_featured')}
+                  {t("home_featured")}
                 </span>
               )}
               {genres.map((g) => (
@@ -110,7 +115,7 @@ export default async function EventDetailPage({
             <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 divide-outline-variant border-b border-outline-variant bg-surface-container-low">
               <div className="p-4 flex flex-col gap-1">
                 <span className="text-[10px] font-mono text-primary uppercase tracking-widest flex items-center gap-1">
-                  <Calendar className="w-3 h-3" /> {t('event_date')}
+                  <Calendar className="w-3 h-3" /> {t("event_date")}
                 </span>
                 <span className="font-headline font-bold text-sm uppercase">
                   {formatEventDate(event.event_date)}
@@ -118,15 +123,15 @@ export default async function EventDetailPage({
               </div>
               <div className="p-4 flex flex-col gap-1">
                 <span className="text-[10px] font-mono text-primary uppercase tracking-widest flex items-center gap-1">
-                  <Clock className="w-3 h-3" /> {t('event_time')}
+                  <Clock className="w-3 h-3" /> {t("event_time")}
                 </span>
                 <span className="font-headline font-bold text-sm uppercase">
-                  {t('event_open')} {formatTime(event.doors_time)} / {t('event_start')} {formatTime(event.start_time)}
+                  {t("event_open")} {formatTime(event.doors_time)} / {t("event_start")} {formatTime(event.start_time)}
                 </span>
               </div>
               <div className="p-4 flex flex-col gap-1">
                 <span className="text-[10px] font-mono text-primary uppercase tracking-widest flex items-center gap-1">
-                  <MapPin className="w-3 h-3" /> {t('event_venue')}
+                  <MapPin className="w-3 h-3" /> {t("event_venue")}
                 </span>
                 <span className="font-headline font-bold text-sm uppercase">
                   {venueName}
@@ -134,91 +139,121 @@ export default async function EventDetailPage({
               </div>
               <div className="p-4 flex flex-col gap-1">
                 <span className="text-[10px] font-mono text-primary uppercase tracking-widest flex items-center gap-1">
-                  <Ticket className="w-3 h-3" /> {t('event_price')}
+                  <Ticket className="w-3 h-3" /> {t("event_price")}
                 </span>
                 <span className="font-headline font-bold text-sm uppercase">
                   {event.ticket_price_adv
-                    ? `${t('common_adv')} ${formatPrice(event.ticket_price_adv)} / DOOR ${formatPrice(event.ticket_price_door)}`
-                    : t('event_freeEntry')}
+                    ? `${t("common_adv")} ${formatPrice(event.ticket_price_adv)} / DOOR ${formatPrice(event.ticket_price_door)}`
+                    : t("event_freeEntry")}
                 </span>
               </div>
             </div>
 
-            {/* Description */}
+            {/* Description — collapsible on mobile, open by default */}
             {eventDesc && (
-              <div className="p-6 md:p-8 border-b border-outline-variant">
-                <h3 className="font-headline font-black text-xl tracking-tighter uppercase mb-4 text-primary">
-                  {t('event_details')} / {lang === 'en' ? 'イベント詳細' : 'EVENT DETAILS'}
-                </h3>
-                <div className="prose prose-invert prose-p:font-body prose-p:text-on-surface-variant prose-p:leading-relaxed prose-p:text-sm max-w-none">
-                  {eventDesc.split("\n").map((para, i) => (
-                    <p key={i}>{para}</p>
-                  ))}
+              <details className="border-b border-outline-variant group" open>
+                <summary className="md:hidden flex items-center justify-between p-4 cursor-pointer list-none font-headline font-black text-sm uppercase text-primary">
+                  {t("event_details")}
+                  <span className="text-outline group-open:rotate-180 transition-transform">▼</span>
+                </summary>
+                <div className="p-6 md:p-8 md:block">
+                  <h3 className="hidden md:block font-headline font-black text-xl tracking-tighter uppercase mb-4 text-primary">
+                    {t("event_details")} / {lang === "en" ? "イベント詳細" : "EVENT DETAILS"}
+                  </h3>
+                  <div className="prose prose-invert prose-p:font-body prose-p:text-on-surface-variant prose-p:leading-relaxed prose-p:text-sm max-w-none">
+                    {eventDesc.split("\n").map((para, i) => (
+                      <p key={i}>{para}</p>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              </details>
             )}
 
-            {/* Lineup */}
+            {/* Lineup — collapsible on mobile, open by default */}
             {artists.length > 0 && (
-              <div className="p-6 md:p-8 border-b border-outline-variant bg-surface-container-lowest">
-                <h3 className="font-headline font-black text-xl tracking-tighter uppercase mb-6 text-primary">
-                  {t('event_lineup')} / {lang === 'en' ? '出演者' : 'LINEUP'}
+              <details className="border-b border-outline-variant bg-surface-container-lowest group" open>
+                <summary className="md:hidden flex items-center justify-between p-4 cursor-pointer list-none font-headline font-black text-sm uppercase text-primary">
+                  {t("event_lineup")}
+                  <span className="text-outline group-open:rotate-180 transition-transform">▼</span>
+                </summary>
+                <div className="p-6 md:p-8 md:block">
+                  <h3 className="hidden md:block font-headline font-black text-xl tracking-tighter uppercase mb-6 text-primary">
+                    {t("event_lineup")} / {lang === "en" ? "出演者" : "LINEUP"}
+                  </h3>
+                  <div className="flex flex-col gap-4">
+                    {artists.map((artist, i) => (
+                      <div key={artist.slug} className="flex items-center gap-4 group/artist">
+                        <div className="w-16 h-16 bg-surface-container-highest relative overflow-hidden shrink-0">
+                          <Image
+                            src={placeholderImage(artist.slug, 200, 200)}
+                            alt={artistName(artist)}
+                            fill
+                            className="object-cover grayscale group-hover/artist:grayscale-0 transition-all"
+                            unoptimized
+                          />
+                        </div>
+                        <div className="flex-1 border-b border-outline-variant pb-4 group-hover/artist:border-primary transition-colors">
+                          <h4 className="font-headline font-bold text-2xl uppercase tracking-tight group-hover/artist:text-primary transition-colors">
+                            {artistName(artist)}
+                          </h4>
+                          <p className="font-mono text-[10px] text-outline uppercase tracking-widest">
+                            {billingLabel(i, artists.length)}
+                          </p>
+                        </div>
+                        <ChevronRight className="w-6 h-6 text-outline group-hover/artist:text-primary transition-colors" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </details>
+            )}
+
+            {/* Timetable — collapsible on mobile, closed by default */}
+            <details className="group">
+              <summary className="md:hidden flex items-center justify-between p-4 cursor-pointer list-none font-headline font-black text-sm uppercase text-primary border-b border-outline-variant">
+                {t("event_timetable")}
+                <span className="text-outline group-open:rotate-180 transition-transform">▼</span>
+              </summary>
+              <div className="p-6 md:p-8 md:block">
+                <h3 className="hidden md:block font-headline font-black text-xl tracking-tighter uppercase mb-6 text-primary">
+                  {t("event_timetable")} / {lang === "en" ? "タイムテーブル" : "TIMETABLE"}
                 </h3>
-                <div className="flex flex-col gap-4">
+                <div className="relative border-l-2 border-outline-variant ml-4 md:ml-8 flex flex-col gap-8 pb-4">
+                  <div className="relative pl-6">
+                    <div className="absolute w-3 h-3 bg-background border-2 border-primary rounded-full -left-[7.5px] top-1.5" />
+                    <p className="font-mono text-xs text-primary font-bold mb-1">
+                      {formatTime(event.doors_time)}
+                    </p>
+                    <p className="font-headline font-bold uppercase">{t("event_doorsOpen")}</p>
+                  </div>
                   {artists.map((artist, i) => (
-                    <div key={artist.slug} className="flex items-center gap-4 group">
-                      <div className="w-16 h-16 bg-surface-container-highest relative overflow-hidden shrink-0">
-                        <Image
-                          src={placeholderImage(artist.slug, 200, 200)}
-                          alt={artistName(artist)}
-                          fill
-                          className="object-cover grayscale group-hover:grayscale-0 transition-all"
-                          unoptimized
-                        />
-                      </div>
-                      <div className="flex-1 border-b border-outline-variant pb-4 group-hover:border-primary transition-colors">
-                        <h4 className="font-headline font-bold text-2xl uppercase tracking-tight group-hover:text-primary transition-colors">
-                          {artistName(artist)}
-                        </h4>
-                        <p className="font-mono text-[10px] text-outline uppercase tracking-widest">
-                          {billingLabel(i, artists.length)}
-                        </p>
-                      </div>
-                      <ChevronRight className="w-6 h-6 text-outline group-hover:text-primary transition-colors" />
+                    <div key={artist.slug} className="relative pl-6">
+                      <div
+                        className={`absolute w-3 h-3 rounded-full -left-[7.5px] top-1.5 ${
+                          i === 0
+                            ? "bg-primary shadow-[0_0_10px_rgba(242,202,80,0.5)]"
+                            : "bg-outline-variant"
+                        }`}
+                      />
+                      <p
+                        className={`font-mono text-xs mb-1 font-bold ${i === 0 ? "text-primary" : "text-outline"}`}
+                      >
+                        {billingLabel(i, artists.length)}
+                      </p>
+                      <p
+                        className={`font-headline font-bold uppercase ${
+                          i === 0
+                            ? "text-2xl text-primary font-black"
+                            : "text-lg"
+                        }`}
+                      >
+                        {artistName(artist)}
+                      </p>
                     </div>
                   ))}
                 </div>
               </div>
-            )}
-
-            {/* Timetable */}
-            <div className="p-6 md:p-8">
-              <h3 className="font-headline font-black text-xl tracking-tighter uppercase mb-6 text-primary">
-                {t('event_timetable')} / {lang === 'en' ? 'タイムテーブル' : 'TIMETABLE'}
-              </h3>
-              <div className="relative border-l-2 border-outline-variant ml-4 md:ml-8 flex flex-col gap-8 pb-4">
-                {/* Doors open */}
-                <div className="relative pl-6">
-                  <div className="absolute w-3 h-3 bg-background border-2 border-primary rounded-full -left-[7.5px] top-1.5" />
-                  <p className="font-mono text-xs text-primary font-bold mb-1">
-                    {formatTime(event.doors_time)}
-                  </p>
-                  <p className="font-headline font-bold uppercase">{t('event_doorsOpen')}</p>
-                </div>
-                {/* Artists in billing order */}
-                {artists.map((artist, i) => (
-                  <div key={artist.slug} className="relative pl-6">
-                    <div className={`absolute w-3 h-3 rounded-full -left-[7.5px] top-1.5 ${i === 0 ? "bg-primary shadow-[0_0_10px_rgba(242,202,80,0.5)]" : "bg-outline-variant"}`} />
-                    <p className={`font-mono text-xs mb-1 font-bold ${i === 0 ? "text-primary" : "text-outline"}`}>
-                      {billingLabel(i, artists.length)}
-                    </p>
-                    <p className={`font-headline font-bold uppercase ${i === 0 ? "text-2xl text-primary font-black" : "text-lg"}`}>
-                      {artistName(artist)}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
+            </details>
 
           </section>
 
@@ -228,14 +263,16 @@ export default async function EventDetailPage({
 
               {/* Ticket Box */}
               <div className="p-6 md:p-8 border-b border-outline-variant bg-surface-container-low">
-                <div className={`text-center py-1 text-[10px] font-black uppercase tracking-widest mb-6 ${availClasses(event.availability)}`}>
+                <div
+                  className={`text-center py-1 text-[10px] font-black uppercase tracking-widest mb-6 ${availClasses(event.availability)}`}
+                >
                   {availLabel(event.availability)}
                 </div>
 
                 {event.ticket_price_adv && (
                   <div className="flex justify-between items-end mb-6">
                     <div>
-                      <p className="text-[10px] font-mono text-outline uppercase mb-1">{t('event_advTicket')}</p>
+                      <p className="text-[10px] font-mono text-outline uppercase mb-1">{t("event_advTicket")}</p>
                       <p className="font-headline font-black text-4xl leading-none">
                         {formatPrice(event.ticket_price_adv)}
                       </p>
@@ -256,7 +293,7 @@ export default async function EventDetailPage({
                     className="w-full bg-primary text-on-primary font-headline font-black py-4 text-lg uppercase tracking-widest hover:bg-primary-container active:scale-[0.98] transition-all flex items-center justify-center gap-2 mb-4"
                   >
                     <Ticket className="w-5 h-5" />
-                    {t('event_reserveTicket')}
+                    {t("event_reserveTicket")}
                   </a>
                 ) : (
                   <button
@@ -264,12 +301,14 @@ export default async function EventDetailPage({
                     className="w-full bg-surface-container-highest text-outline font-headline font-black py-4 text-lg uppercase tracking-widest flex items-center justify-center gap-2 mb-4 cursor-not-allowed"
                   >
                     <Ticket className="w-5 h-5" />
-                    {event.availability === "sold_out" ? t('event_soldOut') : t('event_ticketsAtDoor')}
+                    {event.availability === "sold_out"
+                      ? t("event_soldOut")
+                      : t("event_ticketsAtDoor")}
                   </button>
                 )}
 
                 <p className="text-[10px] font-mono text-outline-variant text-center uppercase">
-                  {t('event_reserveNote')}
+                  {t("event_reserveNote")}
                 </p>
               </div>
 
@@ -277,7 +316,7 @@ export default async function EventDetailPage({
               {venue && (
                 <div className="p-6 md:p-8 border-b border-outline-variant">
                   <h3 className="font-headline font-black text-sm tracking-widest uppercase mb-4 text-outline">
-                    {t('event_venueInfo')}
+                    {t("event_venueInfo")}
                   </h3>
                   <div className="flex items-start gap-4 mb-6">
                     <div className="w-12 h-12 bg-surface-container-highest flex items-center justify-center shrink-0">
@@ -291,7 +330,9 @@ export default async function EventDetailPage({
                         {venueName}
                       </Link>
                       {venue.address_en && (
-                        <p className="font-mono text-[10px] text-outline uppercase mt-1">{venue.address_en}</p>
+                        <p className="font-mono text-[10px] text-outline uppercase mt-1">
+                          {venue.address_en}
+                        </p>
                       )}
                     </div>
                   </div>
@@ -307,7 +348,7 @@ export default async function EventDetailPage({
                     />
                     <div className="absolute inset-0 flex items-center justify-center">
                       <span className="bg-background/80 px-3 py-1 font-headline font-bold text-xs uppercase tracking-widest border border-outline-variant flex items-center gap-2">
-                        {t('event_openInMaps')} <ExternalLink className="w-3 h-3" />
+                        {t("event_openInMaps")} <ExternalLink className="w-3 h-3" />
                       </span>
                     </div>
                   </div>
@@ -319,7 +360,7 @@ export default async function EventDetailPage({
                       rel="noopener noreferrer"
                       className="flex-1 border border-outline-variant py-2 font-headline font-bold text-[10px] uppercase tracking-widest hover:bg-surface-container transition-colors text-center block"
                     >
-                      {t('event_venueWebsite')}
+                      {t("event_venueWebsite")}
                     </a>
                   )}
                 </div>
@@ -328,7 +369,7 @@ export default async function EventDetailPage({
               {/* Share */}
               <div className="p-6 md:p-8 flex items-center justify-between">
                 <span className="font-headline font-bold text-xs uppercase tracking-widest text-outline">
-                  {t('event_shareEvent')}
+                  {t("event_shareEvent")}
                 </span>
                 <button className="text-outline hover:text-primary transition-colors">
                   <Share2 className="w-5 h-5" />
@@ -339,6 +380,19 @@ export default async function EventDetailPage({
           </section>
         </div>
       </main>
+
+      {/* ── Mobile Sticky Ticket Bar ─────────────────────────────────────── */}
+      <MobileTicketBar
+        eventTitle={eventTitle}
+        venueName={venueNameShort}
+        eventDate={formatEventDate(event.event_date)}
+        ticketUrl={event.ticket_url}
+        ticketPriceAdv={event.ticket_price_adv}
+        availability={event.availability}
+        reserveLabel={t("event_reserveTicket")}
+        soldOutLabel={t("event_soldOut")}
+        atDoorLabel={t("event_ticketsAtDoor")}
+      />
     </>
   );
 }

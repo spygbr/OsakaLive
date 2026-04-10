@@ -1,4 +1,5 @@
 import { Sidebar } from "@/components/Sidebar";
+import { SearchFilterChips } from "@/components/SearchFilterChips";
 import Image from "next/image";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
@@ -79,6 +80,9 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           </div>
         </div>
 
+        {/* ── Mobile filter chips + count strip ───────────────────────────── */}
+        <SearchFilterChips areas={areas} genres={genres} eventCount={events.length} />
+
         {/* ── Header ──────────────────────────────────────────────────────── */}
         <section className="p-4 md:p-8 border-b border-outline-variant bg-surface-container">
           <h1 className="text-3xl md:text-5xl font-black font-headline tracking-tighter uppercase leading-none">
@@ -122,7 +126,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                   className="flex flex-col md:flex-row group hover:bg-surface-container-high transition-colors"
                 >
                   {/* Thumbnail */}
-                  <div className="md:w-48 shrink-0 relative aspect-[16/9] md:aspect-square overflow-hidden border-b md:border-b-0 md:border-r border-outline-variant">
+                  <div className="md:w-48 shrink-0 relative aspect-[2/1] md:aspect-square overflow-hidden border-b md:border-b-0 md:border-r border-outline-variant">
                     <Image
                       src={placeholderImage(event.slug, 400, 400)}
                       alt={eventTitle(event)}
@@ -179,7 +183,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                       </div>
                       <Link
                         href={`/event/${event.slug}`}
-                        className={`w-full md:w-auto px-6 py-2 border-2 font-headline font-bold text-xs uppercase transition-all text-center ${
+                        className={`w-full md:w-auto px-3 md:px-6 py-2 border-2 font-headline font-bold text-xs uppercase transition-all text-center ${
                           event.availability === "sold_out"
                             ? "border-outline-variant text-outline hover:bg-surface-container-highest"
                             : "border-primary text-primary hover:bg-primary hover:text-on-primary"

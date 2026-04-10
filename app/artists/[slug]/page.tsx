@@ -80,7 +80,7 @@ export default async function ArtistDetailPage({
                   href={artist.website_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 bg-surface-container border border-outline-variant px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest hover:border-primary hover:text-primary transition-colors"
+                  className="flex items-center gap-1.5 bg-surface-container border border-outline-variant px-3 py-3 md:py-1.5 min-h-[44px] font-mono text-[10px] uppercase tracking-widest hover:border-primary hover:text-primary transition-colors"
                 >
                   <ExternalLink className="w-3 h-3" />
                   WEBSITE
@@ -91,7 +91,7 @@ export default async function ArtistDetailPage({
                   href={artist.instagram_url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-1.5 bg-surface-container border border-outline-variant px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest hover:border-primary hover:text-primary transition-colors"
+                  className="flex items-center gap-1.5 bg-surface-container border border-outline-variant px-3 py-3 md:py-1.5 min-h-[44px] font-mono text-[10px] uppercase tracking-widest hover:border-primary hover:text-primary transition-colors"
                 >
                   <Instagram className="w-3 h-3" />
                   INSTAGRAM
@@ -110,9 +110,22 @@ export default async function ArtistDetailPage({
               ABOUT / プロフィール
             </h2>
             {artist.bio_en ? (
-              <p className="text-on-surface-variant text-sm leading-relaxed">
-                {artist.bio_en}
-              </p>
+              <details className="group/bio">
+                <summary className="md:hidden list-none cursor-pointer">
+                  <p className="text-on-surface-variant text-sm leading-relaxed line-clamp-4 group-open/bio:line-clamp-none">
+                    {artist.bio_en}
+                  </p>
+                  <span className="group-open/bio:hidden mt-1 inline-block text-[10px] font-mono text-primary uppercase">
+                    READ MORE ▼
+                  </span>
+                  <span className="hidden group-open/bio:inline-block mt-1 text-[10px] font-mono text-outline uppercase">
+                    SHOW LESS ▲
+                  </span>
+                </summary>
+                <p className="hidden md:block text-on-surface-variant text-sm leading-relaxed">
+                  {artist.bio_en}
+                </p>
+              </details>
             ) : (
               <p className="text-outline font-mono text-xs uppercase">No biography available.</p>
             )}

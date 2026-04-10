@@ -7,6 +7,21 @@ function getTodayJST(): string {
 }
 
 // ---------------------------------------------------------------------------
+// Filter types
+// ---------------------------------------------------------------------------
+
+export type FilterParams = {
+  area?: string          // area slug
+  genre?: string         // genre slug
+  dateFrom?: string      // YYYY-MM-DD (inclusive)
+  dateTo?: string        // YYYY-MM-DD (inclusive)
+  price?: 'free' | 'paid'
+}
+
+export type AreaOption = { id: number; name_en: string; name_ja: string; slug: string }
+export type GenreOption = { id: number; name_en: string; slug: string }
+
+// ---------------------------------------------------------------------------
 // Shared types
 // ---------------------------------------------------------------------------
 
@@ -167,6 +182,75 @@ export async function getAllUpcomingEvents(limit = 50, offset = 0): Promise<Even
   return normalizeEvents(data ?? [])
 }
 
+/**
+ * Filtered upcoming events — used by the Search page.
+ * Applies area, genre, date range, and price filters from URL params.
+ */
+export async function getFilteredEvents(
+  filters: FilterParams = {},
+  limit = 50,
+  offset = 0,
+): Promise<EventWithVenue[]> {
+  const supabase = createServerClient()
+  const today = getTodayJST()
+  const dateFrom = filters.dateFrom ?? today
+
+  // Resolve optional venue IDs (area filter)
+  let venueIds: string[] | null = null
+  if (filters.area) {
+    const { data: areaRow } = await supabase
+      .from('areas')
+      .select('id')
+      .eq('slug', filters.area)
+      .maybeSingle()
+    if (areaRow) {
+      const { data: venueRows } = await supabase
+        .from('venues')
+        .select('id')
+        .eq('area_id', areaRow.id)
+      venueIds = (venueRows ?? []).map((v) => v.id)
+      if (venueIds.length === 0) return [] // area exists but has no venues
+    }
+  }
+
+  // Resolve optional event IDs (genre filter)
+  let genreEventIds: string[] | null = null
+  if (filters.genre) {
+    const { data: genreRow } = await supabase
+      .from('genres')
+      .select('id')
+      .eq('slug', filters.genre)
+      .maybeSingle()
+    if (genreRow) {
+      const { data: egRows } = await supabase
+        .from('event_genres')
+        .select('event_id')
+        .eq('genre_id', genreRow.id)
+      genreEventIds = (egRows ?? []).map((eg) => eg.event_id as string)
+      if (genreEventIds.length === 0) return [] // genre exists but has no events
+    }
+  }
+
+  // Build main query
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let query: any = supabase
+    .from('events')
+    .select(EVENT_SELECT)
+    .gte('event_date', dateFrom)
+    .order('event_date', { ascending: true })
+    .range(offset, offset + limit - 1)
+
+  if (filters.dateTo) query = query.lte('event_date', filters.dateTo)
+  if (filters.price === 'free') query = query.is('ticket_price_adv', null)
+  if (filters.price === 'paid') query = query.not('ticket_price_adv', 'is', null)
+  if (venueIds !== null) query = query.in('venue_id', venueIds)
+  if (genreEventIds !== null) query = query.in('id', genreEventIds)
+
+  const { data, error } = await query
+  if (error) console.error('[getFilteredEvents]', error.message)
+  return normalizeEvents(data ?? [])
+}
+
 /** Single event by slug — returns null if not found */
 export async function getEventBySlug(slug: string): Promise<EventWithVenue | null> {
   const supabase = createServerClient()
@@ -187,19 +271,68 @@ export async function getAllEventSlugs(): Promise<string[]> {
   return (data ?? []).map((e) => e.slug)
 }
 
-/** Events for a given year/month (for the calendar view) */
-export async function getEventsForMonth(year: number, month: number): Promise<EventWithVenue[]> {
+/** Events for a given year/month (for the calendar view), with optional area/genre/price filters */
+export async function getEventsForMonth(
+  year: number,
+  month: number,
+  filters: Pick<FilterParams, 'area' | 'genre' | 'price'> = {},
+): Promise<EventWithVenue[]> {
   const supabase = createServerClient()
   const mm = String(month).padStart(2, '0')
   const start = `${year}-${mm}-01`
   // Use the last possible day — Postgres will clip to actual month end
   const end = `${year}-${mm}-31`
-  const { data, error } = await supabase
+
+  // Resolve optional venue IDs (area filter)
+  let venueIds: string[] | null = null
+  if (filters.area) {
+    const { data: areaRow } = await supabase
+      .from('areas')
+      .select('id')
+      .eq('slug', filters.area)
+      .maybeSingle()
+    if (areaRow) {
+      const { data: venueRows } = await supabase
+        .from('venues')
+        .select('id')
+        .eq('area_id', areaRow.id)
+      venueIds = (venueRows ?? []).map((v) => v.id)
+      if (venueIds.length === 0) return []
+    }
+  }
+
+  // Resolve optional event IDs (genre filter)
+  let genreEventIds: string[] | null = null
+  if (filters.genre) {
+    const { data: genreRow } = await supabase
+      .from('genres')
+      .select('id')
+      .eq('slug', filters.genre)
+      .maybeSingle()
+    if (genreRow) {
+      const { data: egRows } = await supabase
+        .from('event_genres')
+        .select('event_id')
+        .eq('genre_id', genreRow.id)
+      genreEventIds = (egRows ?? []).map((eg) => eg.event_id as string)
+      if (genreEventIds.length === 0) return []
+    }
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let query: any = supabase
     .from('events')
     .select(EVENT_SELECT)
     .gte('event_date', start)
     .lte('event_date', end)
     .order('event_date', { ascending: true })
+
+  if (filters.price === 'free') query = query.is('ticket_price_adv', null)
+  if (filters.price === 'paid') query = query.not('ticket_price_adv', 'is', null)
+  if (venueIds !== null) query = query.in('venue_id', venueIds)
+  if (genreEventIds !== null) query = query.in('id', genreEventIds)
+
+  const { data, error } = await query
   if (error) console.error('[getEventsForMonth]', error.message)
   return normalizeEvents(data ?? [])
 }
@@ -296,4 +429,26 @@ export async function getAllVenueSlugs(): Promise<string[]> {
   const { data, error } = await supabase.from('venues').select('slug')
   if (error) console.error('[getAllVenueSlugs]', error.message)
   return (data ?? []).map((v) => v.slug)
+}
+
+/** All areas (for sidebar filter) */
+export async function getAreas(): Promise<AreaOption[]> {
+  const supabase = createServerClient()
+  const { data, error } = await supabase
+    .from('areas')
+    .select('id, name_en, name_ja, slug')
+    .order('name_en', { ascending: true })
+  if (error) console.error('[getAreas]', error.message)
+  return (data ?? []) as AreaOption[]
+}
+
+/** All genres (for sidebar filter) */
+export async function getGenres(): Promise<GenreOption[]> {
+  const supabase = createServerClient()
+  const { data, error } = await supabase
+    .from('genres')
+    .select('id, name_en, slug')
+    .order('name_en', { ascending: true })
+  if (error) console.error('[getGenres]', error.message)
+  return (data ?? []) as GenreOption[]
 }

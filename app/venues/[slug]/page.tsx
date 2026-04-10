@@ -78,7 +78,7 @@ export default async function VenueDetailPage({
         </section>
 
         {/* ── Quick-info bar ───────────────────────────────────────────────── */}
-        <div className="flex flex-wrap gap-0 border-b border-outline-variant bg-surface-container divide-x divide-outline-variant">
+        <div className="flex flex-col md:flex-row md:flex-wrap gap-0 border-b border-outline-variant bg-surface-container md:divide-x divide-outline-variant divide-y md:divide-y-0">
           {venue.address_en && (
             <div className="flex items-center gap-2 px-4 md:px-6 py-3">
               <MapPin className="w-3.5 h-3.5 text-primary shrink-0" />

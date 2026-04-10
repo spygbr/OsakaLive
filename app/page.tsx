@@ -1,4 +1,5 @@
 import { Sidebar } from "@/components/Sidebar";
+import { MobileHeroCarousel } from "@/components/MobileHeroCarousel";
 import Image from "next/image";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Star, ArrowRight } from "lucide-react";
@@ -34,36 +35,8 @@ export default async function Home() {
       <Sidebar />
       <main className="flex-1 bg-surface-container-lowest overflow-x-hidden pb-20 md:pb-0">
 
-        {/* ── Mobile Hero ─────────────────────────────────────────────────── */}
-        <section className="md:hidden relative w-full aspect-square overflow-hidden">
-          {hero ? (
-            <>
-              <Image
-                src={placeholderImage(hero.slug, 800, 800)}
-                alt={title(hero)}
-                fill
-                className="object-cover grayscale brightness-50"
-                unoptimized
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent" />
-              <div className="absolute bottom-6 left-6 right-6">
-                <span className={`inline-block px-2 py-0.5 text-xs font-bold font-headline mb-2 uppercase tracking-widest ${availClasses(hero.availability)}`}>
-                  {availLabel(hero.availability)}
-                </span>
-                <h2 className="text-4xl font-black font-headline text-primary-container leading-none uppercase tracking-tighter mb-1">
-                  {title(hero)}
-                </h2>
-                {hero.title_ja && lang === 'en' && (
-                  <p className="text-xl font-bold font-headline text-white/90">{hero.title_ja}</p>
-                )}
-              </div>
-            </>
-          ) : (
-            <div className="w-full h-full bg-surface-container flex items-center justify-center">
-              <p className="text-outline font-mono text-xs uppercase">{t('home_noEventsTonight')}</p>
-            </div>
-          )}
-        </section>
+        {/* ── Mobile Hero: Swipeable Carousel ────────────────────────────── */}
+        <MobileHeroCarousel events={featuredEvents} lang={lang} />
 
         {/* ── Desktop Hero: Featured Shows ────────────────────────────────── */}
         <section className="hidden md:block border-b-2 border-outline-variant">
