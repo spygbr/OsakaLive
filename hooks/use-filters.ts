@@ -50,6 +50,8 @@ export function useFilters(): FilterState {
 
   const hasActiveFilters = !!(area || genre || price || dateFrom || dateTo);
 
+  const FILTER_PAGES = ["/search", "/calendar"];
+
   const setParam = useCallback(
     (updates: Record<string, string | null>) => {
       const params = new URLSearchParams(searchParams.toString());
@@ -61,7 +63,9 @@ export function useFilters(): FilterState {
         }
       }
       const qs = params.toString();
-      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+      const isFilterPage = FILTER_PAGES.some((p) => pathname.startsWith(p));
+      const target = isFilterPage ? pathname : "/search";
+      router.push(qs ? `${target}?${qs}` : target, { scroll: false });
     },
     [searchParams, pathname, router],
   );

@@ -3,7 +3,7 @@ import { MobileHeroCarousel } from "@/components/MobileHeroCarousel";
 import Image from "next/image";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Star, ArrowRight } from "lucide-react";
-import { getFeaturedEvents, getTonightEvents, getUpcomingEvents } from "@/lib/supabase/queries";
+import { getFeaturedEvents, getTonightEvents, getUpcomingEvents, getAreas, getGenres } from "@/lib/supabase/queries";
 import { formatTime, formatPrice, formatEventDateShort, availLabel, availClasses, placeholderImage } from "@/lib/utils";
 import { getLang } from "@/lib/i18n/server";
 import { createT } from "@/lib/i18n/translations";
@@ -14,10 +14,12 @@ export default async function Home() {
   const lang = await getLang();
   const t = createT(lang);
 
-  const [featuredEvents, tonightEvents, upcomingEvents] = await Promise.all([
+  const [featuredEvents, tonightEvents, upcomingEvents, areas, genres] = await Promise.all([
     getFeaturedEvents(3),
     getTonightEvents(10),
     getUpcomingEvents(4),
+    getAreas(),
+    getGenres(),
   ]);
 
   const hero = featuredEvents[0];
@@ -32,7 +34,7 @@ export default async function Home() {
 
   return (
     <>
-      <Sidebar />
+      <Sidebar areas={areas} genres={genres} />
       <main className="flex-1 bg-surface-container-lowest overflow-x-hidden pb-20 md:pb-0">
 
         {/* ── Mobile Hero: Swipeable Carousel ────────────────────────────── */}
@@ -346,13 +348,13 @@ export default async function Home() {
           </div>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             {[
-              { num: "01", en: "NAMBA",        ja: "難波" },
-              { num: "02", en: "SHINSAIBASHI", ja: "心斎橋" },
-              { num: "03", en: "UMEDA",        ja: "梅田" },
+              { num: "01", en: "NAMBA",        ja: "難波",   slug: "namba" },
+              { num: "02", en: "SHINSAIBASHI", ja: "心斎橋", slug: "shinsaibashi" },
+              { num: "03", en: "UMEDA",        ja: "梅田",   slug: "umeda" },
             ].map((area) => (
               <Link
                 key={area.en}
-                href="/search"
+                href={`/search?area=${area.slug}`}
                 className="aspect-square bg-surface-container border border-outline-variant p-4 flex flex-col justify-between hover:bg-primary group transition-all"
               >
                 <span className="font-headline font-black text-4xl text-outline-variant group-hover:text-on-primary/20">
