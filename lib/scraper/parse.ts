@@ -64,22 +64,25 @@ export function parseEventsFromHtml(
 ): RawEvent[] {
   const events: RawEvent[] = []
 
-  // Strip script/style blocks to reduce noise
+  // Strip script/style blocks to reduce noise, then convert block-level tags
+  // to newlines BEFORE stripping all tags — this preserves line structure even
+  // in minified HTML that has no real newlines.
   const cleaned = html
     .replace(/<script[\s\S]*?<\/script>/gi, '')
     .replace(/<style[\s\S]*?<\/style>/gi, '')
-    .replace(/<[^>]+>/g, ' ')          // strip remaining tags
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(?:div|li|p|tr|td|th|h[1-6]|section|article|header|footer|span)[^>]*>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')          // strip remaining inline tags
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&#\d+;/g, ' ')
-    .replace(/\s{2,}/g, ' ')
+    .replace(/[ \t]{2,}/g, ' ')        // collapse horizontal whitespace only (preserve \n)
 
-  // Tokenise by line (~paragraphs)
-  // Note: stripped HTML has no newlines, so also split on 3+ whitespace chars
+  // Tokenise on newlines produced above
   const lines = cleaned
-    .split(/\r?\n|\s{3,}/)
+    .split(/\r?\n/)
     .map((l) => l.trim())
     .filter((l) => l.length > 0 && l.length < 300)
 
