@@ -79,7 +79,7 @@ export default function TicketsPage() {
                   <p className="text-[10px] font-mono text-outline uppercase mb-1">TICKET TYPE</p>
                   <p className="font-headline font-bold text-sm uppercase">ADVANCE (1 PERSON)</p>
                 </div>
-                <Link href="/event/1" className="text-[10px] font-headline font-bold text-primary border-b border-primary uppercase tracking-widest hover:text-primary-container transition-colors">
+                <Link href="/search" className="text-[10px] font-headline font-bold text-primary border-b border-primary uppercase tracking-widest hover:text-primary-container transition-colors">
                   VIEW EVENT
                 </Link>
               </div>
@@ -114,7 +114,7 @@ export default function TicketsPage() {
                   </div>
                   <div className="flex items-center gap-2 text-outline">
                     <MapPin className="w-4 h-4" />
-                    <span className="font-mono text-xs uppercase">BIGCAT AMERICAMURA</span>
+                    <span className="font-mono text-xs uppercase">BIGCAT SHINSAIBASHI</span>
                   </div>
                 </div>
               </div>
@@ -124,7 +124,7 @@ export default function TicketsPage() {
                   <p className="text-[10px] font-mono text-outline uppercase mb-1">TICKET TYPE</p>
                   <p className="font-headline font-bold text-sm uppercase text-on-surface-variant">ADVANCE (2 PEOPLE)</p>
                 </div>
-                <Link href="/event/2" className="text-[10px] font-headline font-bold text-outline border-b border-outline uppercase tracking-widest hover:text-on-surface transition-colors">
+                <Link href="/search" className="text-[10px] font-headline font-bold text-outline border-b border-outline uppercase tracking-widest hover:text-on-surface transition-colors">
                   VIEW EVENT
                 </Link>
               </div>

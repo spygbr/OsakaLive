@@ -344,12 +344,11 @@ export default async function Home() {
             </h3>
             <div className="h-1 w-24 bg-primary mt-1" />
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             {[
               { num: "01", en: "NAMBA",        ja: "難波" },
-              { num: "02", en: "UMEDA",        ja: "梅田" },
-              { num: "03", en: "AMERICAMURA",  ja: "アメリカ村" },
-              { num: "04", en: "SHINSAIBASHI", ja: "心斎橋" },
+              { num: "02", en: "SHINSAIBASHI", ja: "心斎橋" },
+              { num: "03", en: "UMEDA",        ja: "梅田" },
             ].map((area) => (
               <Link
                 key={area.en}
