@@ -58,12 +58,17 @@ function cleanTitle(s: string): string {
     // Remove time patterns like OPEN 18:00 / 開場18:00 / bare 18:00
     .replace(/(?:open|start|close|開場|開演|終演)[:\s：]*\d{1,2}:\d{2}/gi, '')
     .replace(/\b\d{1,2}:\d{2}\b/g, '')
-    // Remove price patterns
+    // Remove price patterns (¥ or 円)
     .replace(/[¥￥]\s*\d[\d,]*/g, '')
     .replace(/\d[\d,]+\s*円/g, '')
+    // Remove adv/door ticket-price prefixes that survive price stripping
+    // e.g. "adv&door" remaining after "adv&door ¥2500" price removal
+    .replace(/\b(?:adv|door)\s*(?:&|＆|\/|・)?\s*(?:door|adv)?\b/gi, '')
+    // Remove time-of-day session labels that aren't useful as event titles
+    .replace(/^(?:昼の部|夜の部|昼公演|夜公演)\s*/u, '')
     // Remove leading/trailing punctuation and whitespace
-    .replace(/^[\s\-\|\/・＊\*\[\]（）()【】~～]+/, '')
-    .replace(/[\s\-\|\/・＊\*\[\]（）()【】~～]+$/, '')
+    .replace(/^[\s\-\|\/・＊\*\[\]（）()【】~～＜＞<>「」『』]+/, '')
+    .replace(/[\s\-\|\/・＊\*\[\]（）()【】~～＜＞<>「」『』]+$/, '')
     .replace(/\s{2,}/g, ' ')
     .trim()
 }
@@ -78,12 +83,15 @@ const BARE_INT_RE = /^\d+$/
 /** Starts with a time */
 const STARTS_TIME_RE = /^\d{1,2}:\d{2}/
 
-/** Common non-title words that appear as standalone lines */
-const NOISE_LINE_RE = /^(?:open|start|close|終演|開場|開演|発売|予約|前売|当日|sold\s*out|チケット|copyright|all\s+rights|reserved|more|詳細|info)/i
+/** Starts with a price label or ticket tier (remaining after cleanTitle's price removal) */
+const PRICE_LABEL_RE = /^(?:[¥￥]|adv\b|door\b|ticket\b|前売\b|当日\b|優先\s*[\/・]?\s*一般)/i
+
+/** Common non-title words/phrases that appear as standalone lines */
+const NOISE_LINE_RE = /^(?:open|start|close|終演|開場|開演|発売|予約|前売|当日|sold\s*out|チケット|copyright|all\s+rights|reserved|more|詳細|info|ホールレンタル|ホール貸|hall\s*rental|coming\s*soon|season\s*off|シーズンオフ)/i
 
 /**
  * Returns true if the cleaned string looks like a real event title.
- * Rejects day names, bare numbers, times, and other noise.
+ * Rejects day names, bare numbers, times, ticket labels, and other noise.
  */
 function isValidTitle(s: string): boolean {
   if (s.length < 4) return false
@@ -91,6 +99,7 @@ function isValidTitle(s: string): boolean {
   if (DOW_EN_RE.test(s)) return false
   if (DOW_JA_RE.test(s)) return false
   if (STARTS_TIME_RE.test(s)) return false
+  if (PRICE_LABEL_RE.test(s)) return false
   if (NOISE_LINE_RE.test(s)) return false
   return true
 }
@@ -101,13 +110,15 @@ function isValidTitle(s: string): boolean {
  * Lightweight HTML-to-events parser.
  *
  * Strategy:
- *   1. Convert block-level HTML tags to newlines to preserve structure in
- *      minified pages that have no real newlines.
+ *   1. Decode HTML entities (including &yen;) and convert block-level tags to
+ *      newlines so that minified HTML produces real line breaks.
  *   2. Tokenise on newlines; filter out lines that are too long (navigation /
  *      boilerplate) or empty.
  *   3. For each line containing a date, scan forward up to 6 lines for the
  *      first line that passes the title validity check. This handles venues
- *      where date and title are on separate lines (calendar grid layouts).
+ *      where date and title are on separate lines (calendar grid layouts) and
+ *      also venues like namba-bears where date+price are on the same header
+ *      line but the actual title (band names) follows in the next cell.
  *   4. Gather a context window around the date line for time/price extraction.
  */
 export function parseEventsFromHtml(
@@ -117,19 +128,25 @@ export function parseEventsFromHtml(
 ): RawEvent[] {
   const events: RawEvent[] = []
 
-  // Strip script/style, convert block tags → newlines, then strip remaining tags
+  // Strip script/style, decode entities, convert block tags → newlines, strip remaining tags
   const cleaned = html
     .replace(/<script[\s\S]*?<\/script>/gi, '')
     .replace(/<style[\s\S]*?<\/style>/gi, '')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/(?:div|li|p|tr|td|th|h[1-6]|section|article|header|footer|span)[^>]*>/gi, '\n')
     .replace(/<[^>]+>/g, ' ')
+    // HTML entity decoding — order matters: specific entities before catch-all
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
+    .replace(/&yen;/gi, '¥')        // ← fix: &yen; must decode before price stripping
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;/gi, "'")
+    .replace(/&#8230;/g, '…')
     .replace(/&#\d+;/g, ' ')
-    .replace(/[ \t]{2,}/g, ' ')      // collapse horizontal whitespace only
+    .replace(/&[a-z]{2,8};/gi, ' ') // catch-all for remaining named entities
+    .replace(/[ \t]{2,}/g, ' ')     // collapse horizontal whitespace only
 
   const lines = cleaned
     .split(/\r?\n/)
@@ -154,9 +171,10 @@ export function parseEventsFromHtml(
     if (eventMs < nowMs - 7 * 86_400_000) continue
 
     // ── Title: scan date line + up to 6 lines ahead ────────────────────────
-    // Many venue pages use a calendar layout where the date cell and event
-    // name cell are adjacent — the day-of-week abbreviation on the same line
-    // is noise, and the title is on a subsequent line.
+    // Many venue pages (namba-bears, hokage, etc.) put date+price on the <th>
+    // header line and band names / event title in the following <td> cell.
+    // cleanTitle strips dates, day-of-week, times, and prices from the header
+    // line — if nothing remains (or it's too short), we move to the next line.
     let title = ''
     const lookAhead = [line, ...lines.slice(i + 1, i + 7)]
     for (const raw of lookAhead) {
