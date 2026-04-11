@@ -55,6 +55,28 @@ async function fetchWithTimeout(url: string, timeoutMs = 15_000): Promise<string
   }
 }
 
+// ── Description builder ──────────────────────────────────────────────────────
+
+/** Build a human-readable description from scraped event data. */
+function buildDescription(r: RawEvent): string | null {
+  const parts: string[] = []
+
+  // Times
+  const timeParts: string[] = []
+  if (r.doorsTime) timeParts.push(`Doors ${r.doorsTime}`)
+  if (r.startTime) timeParts.push(`Start ${r.startTime}`)
+  if (timeParts.length > 0) parts.push(timeParts.join(' / '))
+
+  // Lineup (other acts besides the headliner title)
+  if (r.lineup.length > 0) {
+    const names = r.lineup.slice(0, 6) // cap at 6 acts
+    const suffix = r.lineup.length > 6 ? ' and more' : ''
+    parts.push(`With ${names.join(', ')}${suffix}`)
+  }
+
+  return parts.length > 0 ? parts.join('. ') + '.' : null
+}
+
 // ── Upsert scraped events ─────────────────────────────────────────────────────
 
 async function upsertEvents(
@@ -77,7 +99,7 @@ async function upsertEvents(
     ticket_url:        r.ticketUrl,
     availability:      'on_sale',
     is_featured:       false,
-    description_en:    `Scraped from ${r.sourceUrl}`,
+    description_en:    buildDescription(r),
     description_ja:    null,
   }))
 

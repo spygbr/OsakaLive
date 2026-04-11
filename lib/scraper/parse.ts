@@ -170,18 +170,30 @@ export function parseEventsFromHtml(
     const nowMs   = Date.now() + 9 * 3600 * 1000
     if (eventMs < nowMs - 7 * 86_400_000) continue
 
-    // ── Title: scan date line + up to 6 lines ahead ────────────────────────
+    // ── Title + lineup: scan date line + up to 6 lines ahead ─────────────
     // Many venue pages (namba-bears, hokage, etc.) put date+price on the <th>
     // header line and band names / event title in the following <td> cell.
     // cleanTitle strips dates, day-of-week, times, and prices from the header
     // line — if nothing remains (or it's too short), we move to the next line.
+    // After finding the title, remaining valid lines become the lineup.
     let title = ''
+    const lineup: string[] = []
+    let titleFound = false
     const lookAhead = [line, ...lines.slice(i + 1, i + 7)]
     for (const raw of lookAhead) {
+      // Stop collecting if we hit another date (next event boundary)
+      if (titleFound) {
+        JP_DATE_RE.lastIndex = 0
+        if (JP_DATE_RE.test(raw)) break
+      }
       const candidate = cleanTitle(raw)
       if (isValidTitle(candidate)) {
-        title = candidate
-        break
+        if (!titleFound) {
+          title = candidate
+          titleFound = true
+        } else {
+          lineup.push(candidate)
+        }
       }
     }
     if (!title) continue
@@ -212,6 +224,7 @@ export function parseEventsFromHtml(
       ticketPriceAdv:  prices[0] ?? null,
       ticketPriceDoor: prices[1] ?? prices[0] ?? null,
       ticketUrl: ticketMatch?.[0] ?? null,
+      lineup,
       sourceUrl,
     })
   }

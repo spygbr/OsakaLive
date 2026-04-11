@@ -13,6 +13,8 @@ export type RawEvent = {
   ticketPriceDoor: number | null
   /** URL to buy tickets */
   ticketUrl: string | null
+  /** Additional performer / act names scraped from lines after the title */
+  lineup: string[]
   /** Source URL this event was parsed from */
   sourceUrl: string
 }
