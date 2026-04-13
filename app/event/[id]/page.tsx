@@ -153,9 +153,9 @@ export default async function EventDetailPage({
                   <Ticket className="w-3 h-3" /> {t("event_price")}
                 </span>
                 <span className="font-headline font-bold text-sm uppercase">
-                  {event.ticket_price_adv
-                    ? `${t("common_adv")} ${formatPrice(event.ticket_price_adv)} / DOOR ${formatPrice(event.ticket_price_door)}`
-                    : t("event_freeEntry")}
+                  {(event.ticket_price_adv === 0 || event.ticket_price_door === 0)
+                    ? t("event_freeEntry")
+                    : `${t("common_adv")} ${formatPrice(event.ticket_price_adv)} / DOOR ${formatPrice(event.ticket_price_door)}`}
                 </span>
               </div>
             </div>
@@ -280,7 +280,7 @@ export default async function EventDetailPage({
                   {availLabel(event.availability)}
                 </div>
 
-                {event.ticket_price_adv && (
+                {event.ticket_price_adv != null && (
                   <div className="flex justify-between items-end mb-6">
                     <div>
                       <p className="text-[10px] font-mono text-outline uppercase mb-1">{t("event_advTicket")}</p>

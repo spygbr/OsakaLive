@@ -116,9 +116,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
             {events.map((event) => {
               const venue = event.venue;
               const eventGenres = event.genres;
-              const priceDisplay = event.ticket_price_adv
-                ? `${formatPrice(event.ticket_price_adv)}${event.drink_charge ? " (+1 DRINK)" : ""}`
-                : lang === 'ja' ? "無料" : "FREE";
+              const priceDisplay = `${formatPrice(event.ticket_price_adv)}${event.drink_charge ? " (+1 DRINK)" : ""}`;
 
               return (
                 <div
