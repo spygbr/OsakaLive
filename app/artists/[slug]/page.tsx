@@ -191,11 +191,13 @@ export default async function ArtistDetailPage({
                             START: {formatTime(event.start_time)}
                           </span>
                         )}
-                        {event.ticket_price_adv != null && (
-                          <span className="font-mono text-[10px] text-outline-variant uppercase">
-                            ADV: {formatPrice(event.ticket_price_adv)}
-                          </span>
-                        )}
+                        <span className="font-mono text-[10px] text-outline-variant uppercase">
+                          {event.ticket_price_adv != null
+                            ? `ADV: ${formatPrice(event.ticket_price_adv)}`
+                            : event.ticket_price_door != null
+                              ? `DOOR: ${formatPrice(event.ticket_price_door)}`
+                              : `PRICE: ${formatPrice(null)}`}
+                        </span>
                       </div>
                     </div>
 

@@ -13,9 +13,10 @@ export function formatTime(t: string | null | undefined): string {
   return t.slice(0, 5)
 }
 
-/** 3500 → "¥3,500"  |  null/0 → "FREE" */
+/** 0 → "FREE" | null/undefined → "TBA" | 3500 → "¥3,500" */
 export function formatPrice(p: number | null | undefined): string {
-  if (!p) return 'FREE'
+  if (p == null) return 'TBA'
+  if (p === 0) return 'FREE'
   return `¥${p.toLocaleString()}`
 }
 
