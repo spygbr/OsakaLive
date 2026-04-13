@@ -13,6 +13,9 @@ export function formatTime(t: string | null | undefined): string {
   return t.slice(0, 5)
 }
 
+/** null/undefined/0 → "TBA" | 3500 → "¥3,500" */
+export function formatPrice(p: number | null | undefined): string {
+  if (p == null || p === 0) return 'TBA'
 /** 0 → "FREE" | null/undefined → "TBA" | 3500 → "¥3,500" */
 export function formatPrice(p: number | null | undefined): string {
   if (p == null) return 'TBA'

@@ -116,6 +116,14 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
             {events.map((event) => {
               const venue = event.venue;
               const eventGenres = event.genres;
+              const basePriceDisplay = event.ticket_price_adv != null && event.ticket_price_door != null
+                ? `${t("common_adv")} ${formatPrice(event.ticket_price_adv)} / DOOR ${formatPrice(event.ticket_price_door)}`
+                : event.ticket_price_adv != null
+                  ? `${t("common_adv")} ${formatPrice(event.ticket_price_adv)}`
+                  : event.ticket_price_door != null
+                    ? `DOOR ${formatPrice(event.ticket_price_door)}`
+                    : formatPrice(null);
+              const priceDisplay = `${basePriceDisplay}${event.drink_charge ? " (+1 DRINK)" : ""}`;
               const priceDisplay = `${formatPrice(event.ticket_price_adv)}${event.drink_charge ? " (+1 DRINK)" : ""}`;
 
               return (

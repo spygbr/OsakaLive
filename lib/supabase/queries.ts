@@ -191,6 +191,8 @@ export async function getFilteredEvents(
   limit = 50,
   offset = 0,
 ): Promise<EventWithVenue[]> {
+  if (filters.price === 'free') return []
+
   const supabase = createServerClient()
   const today = getTodayJST()
   const dateFrom = filters.dateFrom ?? today
@@ -241,8 +243,9 @@ export async function getFilteredEvents(
     .range(offset, offset + limit - 1)
 
   if (filters.dateTo) query = query.lte('event_date', filters.dateTo)
-  if (filters.price === 'free') query = query.is('ticket_price_adv', null)
-  if (filters.price === 'paid') query = query.not('ticket_price_adv', 'is', null)
+  if (filters.price === 'paid') {
+    query = query.or('ticket_price_adv.gt.0,ticket_price_door.gt.0')
+  }
   if (venueIds !== null) query = query.in('venue_id', venueIds)
   if (genreEventIds !== null) query = query.in('id', genreEventIds)
 
@@ -277,6 +280,8 @@ export async function getEventsForMonth(
   month: number,
   filters: Pick<FilterParams, 'area' | 'genre' | 'price'> = {},
 ): Promise<EventWithVenue[]> {
+  if (filters.price === 'free') return []
+
   const supabase = createServerClient()
   const mm = String(month).padStart(2, '0')
   const start = `${year}-${mm}-01`
@@ -329,8 +334,9 @@ export async function getEventsForMonth(
     .lte('event_date', end)
     .order('event_date', { ascending: true })
 
-  if (filters.price === 'free') query = query.is('ticket_price_adv', null)
-  if (filters.price === 'paid') query = query.not('ticket_price_adv', 'is', null)
+  if (filters.price === 'paid') {
+    query = query.or('ticket_price_adv.gt.0,ticket_price_door.gt.0')
+  }
   if (venueIds !== null) query = query.in('venue_id', venueIds)
   if (genreEventIds !== null) query = query.in('id', genreEventIds)
 

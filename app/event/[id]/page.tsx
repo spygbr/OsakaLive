@@ -153,6 +153,7 @@ export default async function EventDetailPage({
                   <Ticket className="w-3 h-3" /> {t("event_price")}
                 </span>
                 <span className="font-headline font-bold text-sm uppercase">
+                  {`${t("common_adv")} ${formatPrice(event.ticket_price_adv)} / DOOR ${formatPrice(event.ticket_price_door)}`}
                   {(event.ticket_price_adv === 0 || event.ticket_price_door === 0)
                     ? t("event_freeEntry")
                     : `${t("common_adv")} ${formatPrice(event.ticket_price_adv)} / DOOR ${formatPrice(event.ticket_price_door)}`}
