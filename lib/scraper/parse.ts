@@ -276,6 +276,7 @@ export function parseEventsFromHtml(
       ticketUrl: ticketMatch?.[0] ?? null,
       lineup,
       sourceUrl,
+      sourceContext: ctx.slice(0, 500),
     })
   }
 
