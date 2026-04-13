@@ -124,6 +124,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
                     ? `DOOR ${formatPrice(event.ticket_price_door)}`
                     : formatPrice(null);
               const priceDisplay = `${basePriceDisplay}${event.drink_charge ? " (+1 DRINK)" : ""}`;
+              const priceDisplay = `${formatPrice(event.ticket_price_adv)}${event.drink_charge ? " (+1 DRINK)" : ""}`;
 
               return (
                 <div

@@ -191,6 +191,11 @@ export default async function Home() {
                         <p className="text-[11px] font-mono text-outline-variant uppercase">
                           {t('common_price')}: {formatPrice(event.ticket_price_adv ?? event.ticket_price_door)}
                         </p>
+                        {event.ticket_price_adv != null && (
+                          <p className="text-[11px] font-mono text-outline-variant uppercase">
+                            {t('common_price')}: {formatPrice(event.ticket_price_adv)}
+                          </p>
+                        )}
                       </div>
                     </div>
                   </Link>

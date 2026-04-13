@@ -17,6 +17,8 @@ export type RawEvent = {
   lineup: string[]
   /** Source URL this event was parsed from */
   sourceUrl: string
+  /** Nearby parsed text window used for validation/debugging */
+  sourceContext: string | null
 }
 
 export type ScrapeResult = {
