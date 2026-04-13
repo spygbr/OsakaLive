@@ -3,7 +3,7 @@ import { MobileTicketBar } from "@/components/MobileTicketBar";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronRight, MapPin, Calendar, Clock, Ticket, Share2, ExternalLink } from "lucide-react";
+import { ChevronRight, MapPin, Calendar, Clock, Ticket, Share2, ExternalLink, CalendarPlus } from "lucide-react";
 import { getEventBySlug, getAllEventSlugs } from "@/lib/supabase/queries";
 import { formatTime, formatPrice, formatEventDate, availLabel, availClasses, placeholderImage } from "@/lib/utils";
 import { getLang } from "@/lib/i18n/server";
@@ -50,6 +50,17 @@ export default async function EventDetailPage({
     if (i === total - 1) return t("event_support");
     return t("event_specialGuest");
   };
+
+  // ── Calendar export URLs ───────────────────────────────────────────────────
+  const gcalDate = event.event_date.replace(/-/g, '');
+  const gcalVenue = venue ? `${venue.name_en}, Osaka` : 'Osaka';
+  const gcalUrl =
+    `https://calendar.google.com/calendar/render?action=TEMPLATE` +
+    `&text=${encodeURIComponent(eventTitle)}` +
+    `&dates=${gcalDate}/${gcalDate}` +
+    `&location=${encodeURIComponent(gcalVenue)}` +
+    (eventDesc ? `&details=${encodeURIComponent(eventDesc.slice(0, 500))}` : '');
+  const icalUrl = `/api/event/${event.slug}/ical`;
 
   return (
     <>
@@ -365,6 +376,32 @@ export default async function EventDetailPage({
                   )}
                 </div>
               )}
+
+              {/* Add to Calendar */}
+              <div className="p-6 md:p-8 border-b border-outline-variant">
+                <h3 className="font-headline font-black text-sm tracking-widest uppercase mb-4 text-outline">
+                  Add to Calendar
+                </h3>
+                <div className="flex flex-col gap-2">
+                  <a
+                    href={gcalUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 border border-outline-variant py-2 px-3 font-headline font-bold text-[10px] uppercase tracking-widest hover:bg-surface-container hover:border-primary hover:text-primary transition-colors"
+                  >
+                    <CalendarPlus className="w-3.5 h-3.5 shrink-0" />
+                    Google Calendar
+                  </a>
+                  <a
+                    href={icalUrl}
+                    download={`${event.slug}.ics`}
+                    className="flex items-center gap-2 border border-outline-variant py-2 px-3 font-headline font-bold text-[10px] uppercase tracking-widest hover:bg-surface-container hover:border-primary hover:text-primary transition-colors"
+                  >
+                    <CalendarPlus className="w-3.5 h-3.5 shrink-0" />
+                    Apple / iCal (.ics)
+                  </a>
+                </div>
+              </div>
 
               {/* Share */}
               <div className="p-6 md:p-8 flex items-center justify-between">

@@ -149,7 +149,7 @@ export function parseEventsFromHtml(
     .replace(/[ \t]{2,}/g, ' ')     // collapse horizontal whitespace only
 
   const lines = cleaned
-    .split(/\r?\n/)
+    .split(/\r?\n|\s{3,}/)
     .map((l) => l.trim())
     .filter((l) => l.length > 0 && l.length < 300)
 
