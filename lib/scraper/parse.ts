@@ -35,8 +35,22 @@ const START_RE = /(?:start|開演|start:|start：)\s*(\d{1,2}:\d{2})/i
 
 // ── Price patterns ────────────────────────────────────────────────────────────
 
-/** ¥3,000 / 3000円 / ¥3000 — requires yen symbol OR 円 suffix to avoid bare numbers */
-const PRICE_RE = /(?:[¥￥]\s*(\d[\d,]+)|(\d[\d,]+)\s*円)/gi
+/** Generic yen prices for fallback: ¥3,000 / 3000円 / ¥3000 (currency marker required). */
+const PRICE_RE = /(?:[¥￥]\s*(\d{3,6}(?:,\d{3})*)|(\d{3,6}(?:,\d{3})*)\s*円)(?!\s*(?:tel|phone|id)\b)/gi
+
+/** Tier labels (JP + EN). */
+const ADV_LABEL_RE = /(?:前売|ADV|予約)/i
+const DOOR_LABEL_RE = /(?:当日|DOOR)/i
+
+/** Labeled tier pair: ADV/DOOR: ¥2500/¥3000, 前売・当日 2,500円 | 3,000円 */
+const PRICE_TIER_PAIR_RE =
+  /(?:前売|ADV|予約)\s*(?:\/|／|・|\||｜|:|：|＆|&)\s*(?:当日|DOOR)\s*(?:[:：]?\s*)?(?:[¥￥]\s*)?(\d{3,6}(?:,\d{3})*)\s*(?:円)?\s*(?:\/|／|・|\||｜|:|：|＆|&)\s*(?:[¥￥]\s*)?(\d{3,6}(?:,\d{3})*)\s*(?:円)?/gi
+
+/** Single labeled tier price with flexible punctuation/separators. */
+const PRICE_ADV_RE =
+  /(?:前売|ADV|予約)\s*(?:ticket)?\s*(?:price)?\s*(?:[:：=]|\b)\s*(?:[¥￥]\s*)?(\d{3,6}(?:,\d{3})*)\s*(?:円)?/gi
+const PRICE_DOOR_RE =
+  /(?:当日|DOOR)\s*(?:ticket)?\s*(?:price)?\s*(?:[:：=]|\b)\s*(?:[¥￥]\s*)?(\d{3,6}(?:,\d{3})*)\s*(?:円)?/gi
 
 // ── Ticket URL ────────────────────────────────────────────────────────────────
 
@@ -204,12 +218,48 @@ export function parseEventsFromHtml(
     const openMatch  = OPEN_RE.exec(ctx)
     const startMatch = START_RE.exec(ctx)
 
-    PRICE_RE.lastIndex = 0
-    const prices: number[] = []
-    let pm: RegExpExecArray | null
-    while ((pm = PRICE_RE.exec(ctx)) !== null && prices.length < 2) {
-      const n = parseInt((pm[1] ?? pm[2]).replace(/,/g, ''), 10)
-      if (!isNaN(n) && n >= 500 && n <= 30000) prices.push(n)
+    const parsePrice = (raw: string | undefined): number | null => {
+      if (!raw) return null
+      const n = parseInt(raw.replace(/,/g, ''), 10)
+      // Guardrails: realistic live-house ticket ranges only
+      if (isNaN(n) || n < 500 || n > 30000) return null
+      return n
+    }
+
+    let ticketPriceAdv: number | null = null
+    let ticketPriceDoor: number | null = null
+
+    // 1) Parse explicit tier pairs first (ADV/DOOR together).
+    PRICE_TIER_PAIR_RE.lastIndex = 0
+    const pairMatch = PRICE_TIER_PAIR_RE.exec(ctx)
+    if (pairMatch) {
+      ticketPriceAdv = parsePrice(pairMatch[1])
+      ticketPriceDoor = parsePrice(pairMatch[2])
+    }
+
+    // 2) Parse explicit labeled prices from local event context.
+    if (ticketPriceAdv === null) {
+      PRICE_ADV_RE.lastIndex = 0
+      const advMatch = PRICE_ADV_RE.exec(ctx)
+      ticketPriceAdv = parsePrice(advMatch?.[1])
+    }
+    if (ticketPriceDoor === null) {
+      PRICE_DOOR_RE.lastIndex = 0
+      const doorMatch = PRICE_DOOR_RE.exec(ctx)
+      ticketPriceDoor = parsePrice(doorMatch?.[1])
+    }
+
+    // 3) Fallback: generic yen matcher only when labeled tiers are absent.
+    if (ticketPriceAdv === null && ticketPriceDoor === null && (ADV_LABEL_RE.test(ctx) || DOOR_LABEL_RE.test(ctx) || /[¥￥]|\d+\s*円/.test(ctx))) {
+      PRICE_RE.lastIndex = 0
+      const prices: number[] = []
+      let pm: RegExpExecArray | null
+      while ((pm = PRICE_RE.exec(ctx)) !== null && prices.length < 2) {
+        const n = parsePrice(pm[1] ?? pm[2])
+        if (n !== null) prices.push(n)
+      }
+      ticketPriceAdv = prices[0] ?? null
+      ticketPriceDoor = prices[1] ?? prices[0] ?? null
     }
 
     const ticketMatch = TICKET_URL_RE.exec(html)
@@ -221,8 +271,8 @@ export function parseEventsFromHtml(
       eventDate: isoDate,
       doorsTime: openMatch?.[1] ?? null,
       startTime: startMatch?.[1] ?? null,
-      ticketPriceAdv:  prices[0] ?? null,
-      ticketPriceDoor: prices[1] ?? prices[0] ?? null,
+      ticketPriceAdv,
+      ticketPriceDoor,
       ticketUrl: ticketMatch?.[0] ?? null,
       lineup,
       sourceUrl,
