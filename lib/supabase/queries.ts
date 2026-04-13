@@ -280,8 +280,10 @@ export async function getEventsForMonth(
   const supabase = createServerClient()
   const mm = String(month).padStart(2, '0')
   const start = `${year}-${mm}-01`
-  // Use the last possible day — Postgres will clip to actual month end
-  const end = `${year}-${mm}-31`
+  // Compute the real last day — invalid dates like 2026-04-31 cause a Postgres
+  // error that is silently swallowed, returning 0 events for 30-day months.
+  const lastDay = new Date(year, month, 0).getDate() // month is 1-indexed here
+  const end = `${year}-${mm}-${String(lastDay).padStart(2, '0')}`
 
   // Resolve optional venue IDs (area filter)
   let venueIds: string[] | null = null
