@@ -199,7 +199,15 @@ export function parseEventsFromHtml(
     if (!title) continue
 
     // ── Context window for time + price extraction ─────────────────────────
-    const ctx = lines.slice(Math.max(0, i - 1), Math.min(lines.length, i + 7)).join(' ')
+    // Use a wider window (±2 before, +10 ahead) to catch venues that put
+    // price info on lines further from the date header (e.g. after the lineup).
+    // Stop extending if we hit the next date line to avoid bleed-over.
+    let ctxEnd = Math.min(lines.length, i + 10)
+    for (let k = i + 1; k < ctxEnd; k++) {
+      JP_DATE_RE.lastIndex = 0
+      if (k > i + 1 && JP_DATE_RE.test(lines[k])) { ctxEnd = k; break }
+    }
+    const ctx = lines.slice(Math.max(0, i - 2), ctxEnd).join(' ')
 
     const openMatch  = OPEN_RE.exec(ctx)
     const startMatch = START_RE.exec(ctx)

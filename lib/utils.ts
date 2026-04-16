@@ -13,9 +13,9 @@ export function formatTime(t: string | null | undefined): string {
   return t.slice(0, 5)
 }
 
-/** 3500 → "¥3,500"  |  null/0 → "FREE" */
+/** 3500 → "¥3,500"  |  null/0 → "¥ TBA" (no free shows in Japan) */
 export function formatPrice(p: number | null | undefined): string {
-  if (!p) return 'FREE'
+  if (!p) return '¥ TBA'
   return `¥${p.toLocaleString()}`
 }
 

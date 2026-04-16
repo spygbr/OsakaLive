@@ -118,7 +118,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
               const eventGenres = event.genres;
               const priceDisplay = event.ticket_price_adv
                 ? `${formatPrice(event.ticket_price_adv)}${event.drink_charge ? " (+1 DRINK)" : ""}`
-                : lang === 'ja' ? "無料" : "FREE";
+                : lang === 'ja' ? "料金要確認" : "¥ TBA";
 
               return (
                 <div

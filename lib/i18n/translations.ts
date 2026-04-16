@@ -55,7 +55,7 @@ export const translations = {
   event_reserveTicket:     { en: 'RESERVE TICKET',            ja: 'チケット予約' },
   event_soldOut:           { en: 'SOLD OUT',                  ja: '売り切れ' },
   event_ticketsAtDoor:     { en: 'TICKETS AT DOOR',           ja: '当日券' },
-  event_freeEntry:         { en: 'FREE ENTRY',                ja: '入場無料' },
+  event_freeEntry:         { en: '¥ TBA',                     ja: '料金要確認' },
   event_reserveNote:       { en: 'RESERVATIONS CLOSE AT 15:00 ON THE DAY OF THE EVENT.', ja: '予約は当日15:00で締め切ります。' },
   event_venueInfo:         { en: 'VENUE INFORMATION',         ja: '会場情報' },
   event_openInMaps:        { en: 'OPEN IN MAPS',              ja: '地図を開く' },
