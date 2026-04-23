@@ -130,6 +130,11 @@ const BOILERPLATE_PATTERNS: RegExp[] = [
   /https?:\/\//,           // URLs
   // Instrument role prefix + interpunct (e.g. "G・山田", "Dr・田中", "B・佐藤")
   /^(vo|gt?|ba?|dr?|key|kb|vio?|perc|sax|cho|tr|mc)\s*[・.]\s+/i,
+  // Japanese event series suffixes — recurring nights/events at a venue, never artist names
+  /ダービー/,         // "ブロンズダービー" = Bronze Derby (event series at BRONZE venue)
+  /まつり$|祭り?$/,   // festival suffix
+  /nights?$/i,
+  /session$/i,
 ]
 
 /** Pricing / ticket garbage — discard token */
@@ -161,6 +166,47 @@ const PRICING_PATTERNS: RegExp[] = [
 
 /** Japanese particles in the middle of a string → phrase, not a name */
 const JP_PARTICLES_MID = /[のはをがでにへと].+/
+
+// ── Venue lookup ───────────────────────────────────────────────────────────────
+
+const MIN_VENUE_TOKEN_LEN = 3
+
+interface VenueLookup {
+  exactNames: Set<string>
+  tokenSet:   Set<string>
+}
+
+function buildVenueLookup(venues: { name_en: string; name_ja: string | null }[]): VenueLookup {
+  const exactNames = new Set<string>()
+  const tokenSet   = new Set<string>()
+
+  for (const v of venues) {
+    const names = [v.name_en, v.name_ja].filter(Boolean) as string[]
+    for (const name of names) {
+      const lower = name.toLowerCase().trim()
+      exactNames.add(lower)
+      // Tokenise on whitespace and common separators
+      for (const token of lower.split(/[\s\-_/・]+/)) {
+        if (token.length >= MIN_VENUE_TOKEN_LEN) tokenSet.add(token)
+      }
+    }
+  }
+
+  return { exactNames, tokenSet }
+}
+
+function isVenueName(candidate: string, lookup: VenueLookup): boolean {
+  const lower = candidate.toLowerCase().trim()
+  // Exact match
+  if (lookup.exactNames.has(lower)) return true
+  // Candidate is itself a significant venue token (e.g. "Zeela", "BEARS", "ブロンズ")
+  if (lower.length >= MIN_VENUE_TOKEN_LEN && lookup.tokenSet.has(lower)) return true
+  // Candidate contains a full venue name (e.g. "Namba BEARS presents")
+  for (const venueName of lookup.exactNames) {
+    if (venueName.length >= MIN_VENUE_TOKEN_LEN && lower.includes(venueName)) return true
+  }
+  return false
+}
 
 /** Standalone generic tokens too vague to be an artist */
 const GENERIC_STANDALONE = new Set([
@@ -289,11 +335,12 @@ function scoreToken(
     return { confidence: 'medium', reason: `mixed-case ASCII, ${token.length} chars` }
   }
 
-  // Japanese text only, 2–10 chars, no particles
-  const isJapanese = /^[\u3000-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF\u3040-\u30FF]+$/.test(token)
-  if (isJapanese && token.length >= 2 && token.length <= 10) {
+  // Japanese text (with optional spaces between characters), 2–20 chars, no particles
+  // Allows names like "東京 事変" or "エレファント カシマシ" where spaces appear between kanji/kana
+  const isJapanese = /^[\u3000-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF\u3040-\u30FF][\u3000-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF\u3040-\u30FF\s]*$/.test(token.trim())
+  if (isJapanese && token.trim().length >= 2 && token.trim().length <= 20) {
     if (!JP_PARTICLES_MID.test(token)) {
-      return { confidence: 'medium', reason: `Japanese text, ${token.length} chars` }
+      return { confidence: 'medium', reason: `Japanese text, ${token.trim().length} chars` }
     }
     return { confidence: 'low', reason: 'Japanese with particles (likely phrase)' }
   }
@@ -435,7 +482,19 @@ async function main() {
   }
   console.log(`📅  Loaded ${events.length} events`)
 
-  // ── 2. Load existing artists ───────────────────────────────────────────────
+  // ── 2. Load venues for pre-flight venue check ──────────────────────────────
+  const { data: venueRows, error: venueError } = await supabase
+    .from('venues')
+    .select('name_en, name_ja')
+
+  if (venueError) {
+    console.error('❌  Failed to load venues:', venueError?.message)
+    process.exit(1)
+  }
+  const venueLookup = buildVenueLookup(venueRows ?? [])
+  console.log(`🏛️   Loaded ${(venueRows ?? []).length} venues for name filtering`)
+
+  // ── 3. Load existing artists ───────────────────────────────────────────────
   const { data: artists, error: artistsError } = await supabase
     .from('artists')
     .select('name_en')
@@ -532,6 +591,12 @@ async function main() {
     }
     if (isBoilerplate(c.raw_name)) {
       finalRows.push({ ...c, confidence: 'discard', confidence_reason: 'boilerplate text' })
+      continue
+    }
+    // Venue name check — catches venue names and venue-prefixed event series
+    // (e.g. "Zeela", "BEARS", "ブロンズダービー" → BRONZE venue)
+    if (isVenueName(c.raw_name, venueLookup)) {
+      finalRows.push({ ...c, confidence: 'discard', confidence_reason: 'matches known venue name' })
       continue
     }
     // Tour/event descriptor check — applies to BOTH title and description sources

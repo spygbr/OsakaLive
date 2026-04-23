@@ -2,15 +2,25 @@
  * scripts/review-artist-candidates.ts
  *
  * Phase 2 of the artist extraction pipeline.
- * Sends all unreviewed medium/low-confidence candidates to Claude Haiku for
- * classification, then writes llm_verdict + llm_reviewed back to the DB.
+ *
+ * For each unreviewed candidate (medium, low, AND high confidence):
+ *   1. Venue pre-check  — instantly rejects candidates that match a known venue
+ *      name or are a significant part of one. Free, no API call needed.
+ *   2. LLM classification — sends remaining candidates to Claude Haiku with the
+ *      full venue list injected into the prompt for context.
+ *
+ * Why include high-confidence candidates here?
+ *   High-confidence means the string appears often or is all-caps ASCII — but
+ *   venue names (e.g. "BEARS", "Zeela") can satisfy those criteria too. The
+ *   venue pre-check catches them before promotion.
  *
  * Usage:
- *   npx tsx scripts/review-artist-candidates.ts [--dry-run] [--limit N]
+ *   npx tsx scripts/review-artist-candidates.ts [--dry-run] [--limit N] [--all-confidence]
  *
  * Options:
- *   --dry-run   Print what would be sent; do not call the API or update the DB
- *   --limit N   Only process the first N candidates (useful for sampling)
+ *   --dry-run          Print what would be sent; do not call the API or update the DB
+ *   --limit N          Only process the first N candidates (useful for sampling)
+ *   --all-confidence   Also process high-confidence rows (default: medium + low only)
  *
  * Requires .env.local:
  *   NEXT_PUBLIC_SUPABASE_URL=...
@@ -39,6 +49,7 @@ const SUPABASE_URL   = process.env.NEXT_PUBLIC_SUPABASE_URL
 const SERVICE_KEY    = process.env.SUPABASE_SERVICE_ROLE_KEY
 const ANTHROPIC_KEY  = process.env.ANTHROPIC_API_KEY
 const DRY_RUN        = process.argv.includes('--dry-run')
+const ALL_CONFIDENCE = process.argv.includes('--all-confidence')
 
 const limitIdx = process.argv.indexOf('--limit')
 const LIMIT: number | null = limitIdx !== -1 ? parseInt(process.argv[limitIdx + 1], 10) : null
@@ -64,105 +75,144 @@ const supabase = createClient<any>(SUPABASE_URL, SERVICE_KEY, { auth: { persistS
 
 // ── Config ─────────────────────────────────────────────────────────────────────
 
-const CLAUDE_MODEL  = 'claude-haiku-4-5-20251001'
-const BATCH_SIZE    = 20
+const CLAUDE_MODEL   = 'claude-haiku-4-5-20251001'
+const BATCH_SIZE     = 20
 const BATCH_DELAY_MS = 500
-const MAX_RETRIES   = 3
+const MAX_RETRIES    = 3
+
+// Minimum token length to consider a venue name fragment a meaningful match.
+// Prevents "BIG" or "THE" from matching.
+const MIN_VENUE_TOKEN_LEN = 4
 
 type LlmVerdict = 'artist' | 'not_artist' | 'uncertain'
 
+interface VenueRow {
+  name_en: string
+  name_ja: string | null
+  slug:    string
+}
+
 interface Candidate {
-  id:               string
-  raw_name:         string
-  source:           'title' | 'description'
-  confidence:       string
-  event_id:         string
-  title_en:         string | null
-  description_en:   string | null
+  id:             string
+  raw_name:       string
+  source:         'title' | 'description'
+  confidence:     string
+  event_id:       string
+  title_en:       string | null
+  description_en: string | null
 }
 
 interface ClassificationResult {
   id:      string
   verdict: LlmVerdict
   reason:  string
+  method:  'venue_check' | 'llm'
 }
 
-// ── Anthropic API call ─────────────────────────────────────────────────────────
+// ── Venue matching ─────────────────────────────────────────────────────────────
 
-async function classifyWithClaude(
-  candidates: Candidate[],
-): Promise<ClassificationResult[]> {
-  const results: ClassificationResult[] = []
+/**
+ * Builds a lookup structure from the venues table for fast matching.
+ *
+ * Two sets are produced:
+ *  - exactNames:  full venue names (lowercase), for direct equality checks
+ *  - tokenSet:    individual words ≥ MIN_VENUE_TOKEN_LEN from every venue name,
+ *                 for substring / partial matching
+ *
+ * Example:
+ *   "Umeda Zeela" → exactNames: {"umeda zeela"}, tokenSet: {"umeda", "zeela"}
+ *   "Namba BEARS" → exactNames: {"namba bears"}, tokenSet: {"namba", "bears"}
+ */
+function buildVenueLookup(venues: VenueRow[]): {
+  exactNames: Set<string>
+  tokenSet:   Set<string>
+  venueList:  string[]   // formatted for prompt injection
+} {
+  const exactNames = new Set<string>()
+  const tokenSet   = new Set<string>()
+  const venueList: string[] = []
 
-  for (const candidate of candidates) {
-    const prompt = buildPrompt(candidate)
-    let lastError: unknown
+  for (const v of venues) {
+    const names = [v.name_en, v.name_ja].filter(Boolean) as string[]
 
-    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-      try {
-        const response = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type':         'application/json',
-            'x-api-key':            ANTHROPIC_KEY!,
-            'anthropic-version':    '2023-06-01',
-          },
-          body: JSON.stringify({
-            model:      CLAUDE_MODEL,
-            max_tokens: 150,
-            messages: [
-              { role: 'user', content: prompt },
-            ],
-          }),
-        })
+    for (const name of names) {
+      const lower = name.toLowerCase().trim()
+      exactNames.add(lower)
 
-        if (!response.ok) {
-          const body = await response.text()
-          throw new Error(`HTTP ${response.status}: ${body}`)
-        }
-
-        const data = await response.json()
-        const text: string = data.content?.[0]?.text ?? ''
-        const parsed = parseVerdict(text)
-
-        results.push({ id: candidate.id, ...parsed })
-        break  // success — exit retry loop
-
-      } catch (err) {
-        lastError = err
-        if (attempt < MAX_RETRIES) {
-          const backoff = attempt * 1000
-          process.stderr.write(`  ⚠  Retry ${attempt}/${MAX_RETRIES} for "${candidate.raw_name}" (${backoff}ms)...\n`)
-          await sleep(backoff)
+      // Tokenise on whitespace and common separators
+      for (const token of lower.split(/[\s\-_/・]+/)) {
+        if (token.length >= MIN_VENUE_TOKEN_LEN) {
+          tokenSet.add(token)
         }
       }
     }
 
-    if (results[results.length - 1]?.id !== candidate.id) {
-      // All retries exhausted — record as uncertain so it surfaces for manual review
-      console.error(`  ✗  Failed to classify "${candidate.raw_name}" after ${MAX_RETRIES} retries:`, lastError)
-      results.push({ id: candidate.id, verdict: 'uncertain', reason: 'API error — needs manual review' })
+    venueList.push(v.name_ja ? `${v.name_en} (${v.name_ja})` : v.name_en)
+  }
+
+  return { exactNames, tokenSet, venueList }
+}
+
+/**
+ * Returns a not_artist verdict if the candidate name matches a known venue,
+ * or null if the check is inconclusive (let LLM decide).
+ *
+ * Match strategies (in order):
+ *  1. Exact match against any venue name
+ *  2. Candidate (lowercased) is a significant token found in a venue name
+ *     e.g. "Zeela" → token "zeela" ∈ tokenSet from "Umeda Zeela"
+ *  3. Any venue exact-name is a substring of the candidate
+ *     e.g. candidate "Namba BEARS presents" contains venue "Namba BEARS"
+ */
+function checkAgainstVenues(
+  candidate: string,
+  lookup: ReturnType<typeof buildVenueLookup>,
+): { verdict: LlmVerdict; reason: string } | null {
+  const lower = candidate.toLowerCase().trim()
+
+  // 1. Exact full-name match
+  if (lookup.exactNames.has(lower)) {
+    return { verdict: 'not_artist', reason: 'exact match to known venue name' }
+  }
+
+  // 2. Candidate is itself a significant venue token
+  //    (handles "Zeela", "BEARS", "Quattro", "JANUS", etc.)
+  if (lower.length >= MIN_VENUE_TOKEN_LEN && lookup.tokenSet.has(lower)) {
+    return { verdict: 'not_artist', reason: `"${candidate}" is a token from a known venue name` }
+  }
+
+  // 3. Any full venue name is contained within the candidate string
+  //    (handles "Namba BEARS presents", "Club Quattro Night" etc.)
+  for (const venueName of lookup.exactNames) {
+    if (lower.includes(venueName) && venueName.length >= MIN_VENUE_TOKEN_LEN) {
+      return { verdict: 'not_artist', reason: `contains known venue name "${venueName}"` }
     }
   }
 
-  return results
+  return null  // inconclusive — send to LLM
 }
 
 // ── Prompt construction ────────────────────────────────────────────────────────
 
-function buildPrompt(c: Candidate): string {
-  // Truncate event context to keep tokens low; Haiku charges per token
+function buildPrompt(c: Candidate, venueList: string[]): string {
   const title = (c.title_en ?? '').slice(0, 120)
   const desc  = (c.description_en ?? '').slice(0, 300)
+  const venues = venueList.join(', ')
 
-  return `You are classifying strings extracted from Japanese live music event listings.
+  return `You are classifying strings extracted from Japanese live music event listings in Osaka.
 
 Classify this string as ONE of: "artist", "not_artist", or "uncertain"
 
 Rules:
 - "artist": a performing band or solo artist name
-- "not_artist": a show title, series name, genre label, venue name, or pricing string
+- "not_artist": a show title, series name, genre label, venue name, promoter name, or pricing string
 - "uncertain": genuinely ambiguous — could be either
+
+Known Osaka live venues (these are NOT artists):
+${venues}
+
+If the string matches or closely resembles any of the above venue names, or is clearly a
+venue abbreviation or nickname (e.g. "Bears" for "Namba BEARS"), classify as "not_artist".
 
 String: "${c.raw_name}"
 Event title it appeared in: "${title}"
@@ -174,22 +224,15 @@ Respond with JSON only: {"verdict": "artist"|"not_artist"|"uncertain", "reason":
 // ── Response parsing ───────────────────────────────────────────────────────────
 
 function parseVerdict(text: string): { verdict: LlmVerdict; reason: string } {
-  // Strip markdown code fences if present
   const cleaned = text.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim()
 
   let parsed: unknown
   try {
-    // Try the full text first
     parsed = JSON.parse(cleaned)
   } catch {
-    // Try to extract the first {...} block
     const match = cleaned.match(/\{[\s\S]*?\}/)
     if (match) {
-      try {
-        parsed = JSON.parse(match[0])
-      } catch {
-        // fall through to fallback
-      }
+      try { parsed = JSON.parse(match[0]) } catch { /* fall through */ }
     }
   }
 
@@ -203,41 +246,92 @@ function parseVerdict(text: string): { verdict: LlmVerdict; reason: string } {
     const obj    = parsed as Record<string, unknown>
     const v      = (obj.verdict as string).toLowerCase().trim()
     const reason = typeof obj.reason === 'string' ? obj.reason.trim() : 'no reason given'
-
     if (v === 'artist' || v === 'not_artist' || v === 'uncertain') {
       return { verdict: v as LlmVerdict, reason }
     }
   }
 
-  // Could not parse a valid verdict — flag as uncertain
   return {
     verdict: 'uncertain',
     reason:  `parse error — raw response: ${text.slice(0, 80)}`,
   }
 }
 
+// ── Anthropic API ──────────────────────────────────────────────────────────────
+
+async function classifyWithClaude(
+  candidates: Candidate[],
+  venueList: string[],
+): Promise<ClassificationResult[]> {
+  const results: ClassificationResult[] = []
+
+  for (const candidate of candidates) {
+    const prompt = buildPrompt(candidate, venueList)
+    let lastError: unknown
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const response = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST',
+          headers: {
+            'Content-Type':      'application/json',
+            'x-api-key':         ANTHROPIC_KEY!,
+            'anthropic-version': '2023-06-01',
+          },
+          body: JSON.stringify({
+            model:      CLAUDE_MODEL,
+            max_tokens: 150,
+            messages: [{ role: 'user', content: prompt }],
+          }),
+        })
+
+        if (!response.ok) {
+          const body = await response.text()
+          throw new Error(`HTTP ${response.status}: ${body}`)
+        }
+
+        const data = await response.json()
+        const text: string = data.content?.[0]?.text ?? ''
+        const parsed = parseVerdict(text)
+        results.push({ id: candidate.id, ...parsed, method: 'llm' })
+        break
+
+      } catch (err) {
+        lastError = err
+        if (attempt < MAX_RETRIES) {
+          const backoff = attempt * 1000
+          process.stderr.write(`  ⚠  Retry ${attempt}/${MAX_RETRIES} for "${candidate.raw_name}" (${backoff}ms)...\n`)
+          await sleep(backoff)
+        }
+      }
+    }
+
+    if (results[results.length - 1]?.id !== candidate.id) {
+      console.error(`  ✗  Failed to classify "${candidate.raw_name}" after ${MAX_RETRIES} retries:`, lastError)
+      results.push({ id: candidate.id, verdict: 'uncertain', reason: 'API error — needs manual review', method: 'llm' })
+    }
+  }
+
+  return results
+}
+
 // ── DB helpers ─────────────────────────────────────────────────────────────────
 
 async function markReviewed(results: ClassificationResult[]): Promise<void> {
-  // Update in batches to avoid hitting Supabase request size limits
   const CHUNK = 100
   for (let i = 0; i < results.length; i += CHUNK) {
     const chunk = results.slice(i, i + CHUNK)
-
-    // Supabase JS doesn't support bulk UPDATE with per-row values natively,
-    // so we use individual updates. For 100-row chunks this is fine via HTTP/2.
     await Promise.all(
       chunk.map(r =>
         supabase
           .from('artist_candidates')
           .update({ llm_reviewed: true, llm_verdict: r.verdict })
           .eq('id', r.id)
-          .then(({ error }) => {
+          .then(({ error }: { error: { message: string } | null }) => {
             if (error) throw new Error(`Update failed for ${r.id}: ${error.message}`)
           }),
       ),
     )
-
     process.stdout.write(`\r    Saved ${Math.min(i + CHUNK, results.length)} / ${results.length} results...`)
   }
 }
@@ -255,10 +349,32 @@ function fmt(n: number, width = 4): string {
 // ── Main ───────────────────────────────────────────────────────────────────────
 
 async function main() {
-  console.log(`\n🤖  Artist candidate LLM reviewer${DRY_RUN ? '  [DRY RUN]' : ''}`)
-  console.log(`    Model: ${CLAUDE_MODEL}\n`)
+  console.log(`\n🤖  Artist candidate reviewer${DRY_RUN ? '  [DRY RUN]' : ''}`)
+  console.log(`    Model: ${CLAUDE_MODEL}`)
+  console.log(`    Confidence levels: ${ALL_CONFIDENCE ? 'high + medium + low' : 'medium + low'}\n`)
 
-  // ── 1. Load unreviewed medium/low candidates with their event context ──────
+  // ── 1. Load venues ──────────────────────────────────────────────────────────
+  const { data: venueRows, error: venueError } = await supabase
+    .from('venues')
+    .select('name_en, name_ja, slug')
+    .order('name_en')
+
+  if (venueError || !venueRows) {
+    console.error('❌  Failed to load venues:', venueError?.message)
+    process.exit(1)
+  }
+
+  const venues = venueRows as VenueRow[]
+  const venueLookup = buildVenueLookup(venues)
+
+  console.log(`🏛️   Loaded ${venues.length} venues for pre-flight check`)
+  console.log(`    Venue tokens: ${venueLookup.tokenSet.size} unique tokens\n`)
+
+  // ── 2. Load unreviewed candidates ───────────────────────────────────────────
+  const confidenceLevels = ALL_CONFIDENCE
+    ? ['high', 'medium', 'low']
+    : ['medium', 'low']
+
   let query = supabase
     .from('artist_candidates')
     .select(`
@@ -272,9 +388,9 @@ async function main() {
         description_en
       )
     `)
-    .in('confidence', ['medium', 'low'])
+    .in('confidence', confidenceLevels)
     .eq('llm_reviewed', false)
-    .order('confidence')   // process medium before low
+    .order('confidence')
     .order('raw_name')
 
   if (LIMIT !== null && !isNaN(LIMIT)) {
@@ -289,11 +405,10 @@ async function main() {
   }
 
   if (!rawRows || rawRows.length === 0) {
-    console.log('✅  No unreviewed medium/low candidates found. Phase 2 complete (or Phase 1 not yet run).\n')
+    console.log('✅  No unreviewed candidates found.\n')
     return
   }
 
-  // Flatten the joined events data
   const candidates: Candidate[] = rawRows.map((row: Record<string, unknown>) => {
     const ev = row.events as { title_en?: string | null; description_en?: string | null } | null
     return {
@@ -307,108 +422,121 @@ async function main() {
     }
   })
 
-  const mediumCount = candidates.filter(c => c.confidence === 'medium').length
-  const lowCount    = candidates.filter(c => c.confidence === 'low').length
-  const totalBatches = Math.ceil(candidates.length / BATCH_SIZE)
-
   console.log(`📋  Candidates to review: ${candidates.length}`)
-  console.log(`    medium: ${mediumCount}   low: ${lowCount}`)
-  console.log(`    Batches: ${totalBatches} × ${BATCH_SIZE}\n`)
+
+  // ── 3. Venue pre-flight check ───────────────────────────────────────────────
+  const venueRejected: ClassificationResult[] = []
+  const needsLlm:      Candidate[]            = []
+
+  for (const c of candidates) {
+    const venueMatch = checkAgainstVenues(c.raw_name, venueLookup)
+    if (venueMatch) {
+      venueRejected.push({ id: c.id, ...venueMatch, method: 'venue_check' })
+      if (DRY_RUN) {
+        console.log(`  🏛️  [venue] "${c.raw_name}" → ${venueMatch.reason}`)
+      }
+    } else {
+      needsLlm.push(c)
+    }
+  }
+
+  console.log(`\n🏛️   Venue pre-check: ${venueRejected.length} rejected as venues, ${needsLlm.length} sent to LLM\n`)
 
   if (DRY_RUN) {
-    console.log('🔍  Sample prompts (first 3 candidates):\n')
-    for (const c of candidates.slice(0, 3)) {
+    console.log('🔍  Sample LLM prompts (first 3 remaining candidates):\n')
+    for (const c of needsLlm.slice(0, 3)) {
       console.log('─'.repeat(60))
       console.log(`  [${c.confidence}] "${c.raw_name}"  (source: ${c.source})`)
-      console.log(buildPrompt(c))
+      console.log(buildPrompt(c, venueLookup.venueList))
       console.log()
     }
     console.log('✅  Dry run complete. Remove --dry-run to classify.\n')
     return
   }
 
-  // ── 2. Process batches ────────────────────────────────────────────────────
-  const allResults: ClassificationResult[] = []
-  const verdictCounts: Record<LlmVerdict, number> = { artist: 0, not_artist: 0, uncertain: 0 }
-  let errors = 0
-
-  for (let b = 0; b < candidates.length; b += BATCH_SIZE) {
-    const batch      = candidates.slice(b, b + BATCH_SIZE)
-    const batchNum   = Math.floor(b / BATCH_SIZE) + 1
-    const pct        = Math.round((b / candidates.length) * 100)
-
-    process.stdout.write(
-      `\r  Batch ${fmt(batchNum, 3)} / ${totalBatches}  (${fmt(b + batch.length)} processed, ${pct}% done)...`
-    )
-
-    const results = await classifyWithClaude(batch)
-    allResults.push(...results)
-
-    for (const r of results) {
-      verdictCounts[r.verdict]++
-      if (r.reason.startsWith('API error') || r.reason.startsWith('parse error')) errors++
-    }
-
-    // Persist after each batch so a crash doesn't lose work
-    await markReviewed(results)
-
-    // Polite delay between batches
-    if (b + BATCH_SIZE < candidates.length) {
-      await sleep(BATCH_DELAY_MS)
-    }
+  // Persist venue rejections immediately — no LLM cost
+  if (venueRejected.length > 0) {
+    process.stdout.write(`\n💾  Saving ${venueRejected.length} venue rejections...`)
+    await markReviewed(venueRejected)
+    console.log(' done.\n')
   }
 
-  // ── 3. Summary ────────────────────────────────────────────────────────────
-  console.log(`\n\n✅  Phase 2 complete — ${allResults.length} candidates reviewed.\n`)
+  // ── 4. LLM classification for remaining candidates ──────────────────────────
+  if (needsLlm.length === 0) {
+    console.log('✅  All candidates handled by venue pre-check — no LLM calls needed.\n')
+  } else {
+    const totalBatches = Math.ceil(needsLlm.length / BATCH_SIZE)
+    console.log(`🤖  LLM classification: ${needsLlm.length} candidates in ${totalBatches} batch(es)\n`)
 
-  console.log('📊  Verdict breakdown:')
-  console.log(`    artist     : ${verdictCounts.artist}`)
-  console.log(`    not_artist : ${verdictCounts.not_artist}`)
-  console.log(`    uncertain  : ${verdictCounts.uncertain}`)
-  if (errors > 0) {
-    console.log(`    ⚠  errors  : ${errors}  (marked uncertain; review manually)`)
-  }
+    const llmResults: ClassificationResult[] = []
+    const verdictCounts: Record<LlmVerdict, number> = { artist: 0, not_artist: 0, uncertain: 0 }
+    let errors = 0
 
-  // Print a sample of artists found
-  const artistResults = allResults.filter(r => r.verdict === 'artist')
-  if (artistResults.length > 0) {
-    console.log('\n🎤  Sample of confirmed artists (first 20):\n')
-    for (const r of artistResults.slice(0, 20)) {
-      const c = candidates.find(c => c.id === r.id)!
-      const conf = c.confidence.padEnd(8)
-      console.log(`  [${conf}] "${c.raw_name}"  — ${r.reason}`)
-    }
-    if (artistResults.length > 20) {
-      console.log(`  … and ${artistResults.length - 20} more`)
-    }
-  }
+    for (let b = 0; b < needsLlm.length; b += BATCH_SIZE) {
+      const batch    = needsLlm.slice(b, b + BATCH_SIZE)
+      const batchNum = Math.floor(b / BATCH_SIZE) + 1
+      const pct      = Math.round((b / needsLlm.length) * 100)
 
-  const uncertainResults = allResults.filter(r => r.verdict === 'uncertain')
-  if (uncertainResults.length > 0) {
-    console.log('\n❓  Uncertain — needs manual review:\n')
-    for (const r of uncertainResults.slice(0, 10)) {
-      const c = candidates.find(c => c.id === r.id)!
-      console.log(`  "${c.raw_name}"  — ${r.reason}`)
+      process.stdout.write(
+        `\r  Batch ${fmt(batchNum, 3)} / ${totalBatches}  (${fmt(b + batch.length)} processed, ${pct}% done)...`
+      )
+
+      const results = await classifyWithClaude(batch, venueLookup.venueList)
+      llmResults.push(...results)
+
+      for (const r of results) {
+        verdictCounts[r.verdict]++
+        if (r.reason.startsWith('API error') || r.reason.startsWith('parse error')) errors++
+      }
+
+      await markReviewed(results)
+
+      if (b + BATCH_SIZE < needsLlm.length) {
+        await sleep(BATCH_DELAY_MS)
+      }
     }
-    if (uncertainResults.length > 10) {
-      console.log(`  … and ${uncertainResults.length - 10} more`)
+
+    const allResults = [...venueRejected, ...llmResults]
+
+    // ── 5. Summary ──────────────────────────────────────────────────────────
+    console.log(`\n\n✅  Review complete — ${allResults.length} candidates processed.\n`)
+
+    console.log('📊  Results breakdown:')
+    console.log(`    venue pre-check rejections : ${venueRejected.length}`)
+    console.log(`    LLM → artist               : ${verdictCounts.artist}`)
+    console.log(`    LLM → not_artist           : ${verdictCounts.not_artist}`)
+    console.log(`    LLM → uncertain            : ${verdictCounts.uncertain}`)
+    if (errors > 0) {
+      console.log(`    ⚠  LLM errors             : ${errors}  (marked uncertain; review manually)`)
+    }
+
+    const artistResults = llmResults.filter(r => r.verdict === 'artist')
+    if (artistResults.length > 0) {
+      console.log('\n🎤  Sample confirmed artists (first 20):\n')
+      for (const r of artistResults.slice(0, 20)) {
+        const c = needsLlm.find(c => c.id === r.id)!
+        console.log(`  [${c.confidence.padEnd(8)}] "${c.raw_name}"  — ${r.reason}`)
+      }
+      if (artistResults.length > 20) console.log(`  … and ${artistResults.length - 20} more`)
+    }
+
+    const uncertainResults = llmResults.filter(r => r.verdict === 'uncertain')
+    if (uncertainResults.length > 0) {
+      console.log('\n❓  Uncertain — needs manual review:\n')
+      for (const r of uncertainResults.slice(0, 10)) {
+        const c = needsLlm.find(c => c.id === r.id)!
+        console.log(`  "${c.raw_name}"  — ${r.reason}`)
+      }
+      if (uncertainResults.length > 10) console.log(`  … and ${uncertainResults.length - 10} more`)
     }
   }
 
   console.log('\n🔍  Review the results:\n')
-  console.log("    -- Artists ready to promote:")
   console.log("    SELECT raw_name, confidence, llm_verdict, event_count")
   console.log("    FROM artist_candidate_summary")
   console.log("    WHERE (confidence = 'high' OR llm_verdict = 'artist')")
   console.log("      AND NOT already_promoted")
   console.log("    ORDER BY event_count DESC;\n")
-  console.log("    -- Uncertain / needs manual decision:")
-  console.log("    SELECT raw_name, confidence, llm_verdict, event_count, confidence_reason")
-  console.log("    FROM artist_candidate_summary")
-  console.log("    WHERE llm_verdict = 'uncertain'")
-  console.log("    ORDER BY event_count DESC;\n")
-  console.log("    -- Override a verdict manually:")
-  console.log("    UPDATE artist_candidates SET llm_verdict = 'artist' WHERE raw_name = 'BAND NAME';\n")
 }
 
 main().catch(err => {

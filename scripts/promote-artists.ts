@@ -133,6 +133,7 @@ async function main() {
     .select('id, raw_name, source, confidence, event_id')
     .eq('promoted', false)
     .or('confidence.eq.high,llm_verdict.eq.artist')
+    .neq('llm_verdict', 'not_artist')   // honour manual rejections even on high-confidence rows
 
   if (candError || !candidates) {
     console.error('❌  Failed to load candidates:', candError?.message)

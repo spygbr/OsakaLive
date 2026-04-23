@@ -1,52 +1,59 @@
 /**
  * GET /api/cron/scrape-events
  *
- * Called by Vercel Cron daily at 02:00 JST (17:00 UTC prev day).
- * Can also be triggered manually from the Vercel dashboard or via curl:
+ * Vercel Cron entrypoint. Drives the v2 pipeline:
+ *   1. loadSources()  — materialise enabled sources (venues + aggregators) from DB
+ *   2. runSources()   — fetch → validate → resolve venue → upsert → scrape_logs
+ *
+ * The runner handles HTTP caching (ETag / hash), validation, quarantine to
+ * events_rejected, and dedup via the (venue_id, event_date, title_norm) unique
+ * constraint. There is no separate "aggregator cycle" anymore — the registry
+ * decides which kind each source is.
  *
  *   curl -H "Authorization: Bearer $CRON_SECRET" \
  *        https://osaka-live.vercel.app/api/cron/scrape-events
- *
- * Required env vars:
- *   CRON_SECRET             — shared secret, set in Vercel project settings
- *   SUPABASE_SERVICE_ROLE_KEY — service-role key (never exposed to the client)
- *   NEXT_PUBLIC_SUPABASE_URL — already set
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { runScrapeCycle } from '@/lib/scraper'
+import { getAdminClient, runSources } from '@/lib/scraper/v2/runner'
+import { loadSources } from '@/lib/scraper/v2/sources'
+import { loadVenueIndex } from '@/lib/scraper/v2/venue-resolver'
 
-// Vercel sets the max duration for cron functions; 60 s is fine for 12 venues
 export const maxDuration = 60
 
 export async function GET(req: NextRequest) {
-  // ── Auth check ─────────────────────────────────────────────────────────────
+  // ── Auth ────────────────────────────────────────────────────────────────
   const authHeader = req.headers.get('authorization')
-  const secret     = process.env.CRON_SECRET
-
-  if (secret) {
-    // When CRON_SECRET is set, require it (protects against accidental public calls)
-    if (authHeader !== `Bearer ${secret}`) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+  const secret = process.env.CRON_SECRET
+  if (secret && authHeader !== `Bearer ${secret}`) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
-  // If CRON_SECRET is not set in env, allow the call (Vercel calls are already
-  // protected by the cron framework — only set the secret for extra safety)
 
   try {
-    const results = await runScrapeCycle()
+    const supabase    = getAdminClient()
+    const sources     = await loadSources(supabase)
+    const venueIndex  = await loadVenueIndex(supabase)
+
+    if (sources.length === 0) {
+      return NextResponse.json({ ok: true, message: 'No enabled sources', results: [] })
+    }
+
+    const results = await runSources(sources, 4, { supabase, venueIndex })
 
     const summary = {
       ok: true,
-      totalVenues: results.length,
-      succeeded:   results.filter((r) => r.status === 'success').length,
-      failed:      results.filter((r) => r.status === 'failed').length,
-      eventsFound: results.reduce((s, r) => s + r.eventsFound, 0),
-      eventsUpserted: results.reduce((s, r) => s + r.eventsUpserted, 0),
+      totalSources: results.length,
+      succeeded:    results.filter((r) => r.status === 'success').length,
+      skipped:      results.filter((r) => r.status === 'skipped').length,
+      failed:       results.filter((r) => r.status === 'failed').length,
+      parsed:       results.reduce((s, r) => s + r.parsed,   0),
+      rejected:     results.reduce((s, r) => s + r.rejected, 0),
+      unresolved:   results.reduce((s, r) => s + r.unresolved, 0),
+      upserted:     results.reduce((s, r) => s + r.upserted, 0),
       results,
     }
 
-    console.log('[cron] scrape-events completed:', JSON.stringify(summary))
+    console.log('[cron] scrape-events:', JSON.stringify(summary))
     return NextResponse.json(summary)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
