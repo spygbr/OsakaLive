@@ -31,6 +31,7 @@
 import fs   from 'fs'
 import path from 'path'
 import { createClient } from '@supabase/supabase-js'
+import { createHaikuClient, type HaikuClient } from '../lib/llm/haiku'
 
 // ── Load .env.local ────────────────────────────────────────────────────────────
 const envPath = path.resolve(process.cwd(), '.env.local')
@@ -75,14 +76,19 @@ const supabase = createClient<any>(SUPABASE_URL, SERVICE_KEY, { auth: { persistS
 
 // ── Config ─────────────────────────────────────────────────────────────────────
 
-const CLAUDE_MODEL   = 'claude-haiku-4-5-20251001'
 const BATCH_SIZE     = 20
 const BATCH_DELAY_MS = 500
-const MAX_RETRIES    = 3
 
 // Minimum token length to consider a venue name fragment a meaningful match.
 // Prevents "BIG" or "THE" from matching.
 const MIN_VENUE_TOKEN_LEN = 4
+
+// Shared Haiku client — lazily instantiated so --dry-run works without an API key
+let haiku: HaikuClient | null = null
+function getHaiku(): HaikuClient {
+  if (!haiku) haiku = createHaikuClient({ rateDelayMs: 100 })
+  return haiku
+}
 
 type LlmVerdict = 'artist' | 'not_artist' | 'uncertain'
 
@@ -98,8 +104,8 @@ interface Candidate {
   source:         'title' | 'description'
   confidence:     string
   event_id:       string
-  title_en:       string | null
-  description_en: string | null
+  title_raw:   string | null
+  description: string | null
 }
 
 interface ClassificationResult {
@@ -195,8 +201,8 @@ function checkAgainstVenues(
 // ── Prompt construction ────────────────────────────────────────────────────────
 
 function buildPrompt(c: Candidate, venueList: string[]): string {
-  const title = (c.title_en ?? '').slice(0, 120)
-  const desc  = (c.description_en ?? '').slice(0, 300)
+  const title = (c.title_raw ?? '').slice(0, 120)
+  const desc  = (c.description ?? '').slice(0, 300)
   const venues = venueList.join(', ')
 
   return `You are classifying strings extracted from Japanese live music event listings in Osaka.
@@ -221,95 +227,51 @@ Event description: "${desc}"
 Respond with JSON only: {"verdict": "artist"|"not_artist"|"uncertain", "reason": "one concise sentence"}`
 }
 
-// ── Response parsing ───────────────────────────────────────────────────────────
+// ── LLM classification (via shared Haiku client) ──────────────────────────────
 
-function parseVerdict(text: string): { verdict: LlmVerdict; reason: string } {
-  const cleaned = text.replace(/```(?:json)?/gi, '').replace(/```/g, '').trim()
-
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(cleaned)
-  } catch {
-    const match = cleaned.match(/\{[\s\S]*?\}/)
-    if (match) {
-      try { parsed = JSON.parse(match[0]) } catch { /* fall through */ }
-    }
-  }
-
-  if (
-    parsed &&
-    typeof parsed === 'object' &&
-    parsed !== null &&
-    'verdict' in parsed &&
-    typeof (parsed as Record<string, unknown>).verdict === 'string'
-  ) {
-    const obj    = parsed as Record<string, unknown>
-    const v      = (obj.verdict as string).toLowerCase().trim()
-    const reason = typeof obj.reason === 'string' ? obj.reason.trim() : 'no reason given'
-    if (v === 'artist' || v === 'not_artist' || v === 'uncertain') {
-      return { verdict: v as LlmVerdict, reason }
-    }
-  }
-
-  return {
-    verdict: 'uncertain',
-    reason:  `parse error — raw response: ${text.slice(0, 80)}`,
-  }
+interface VerdictPayload {
+  verdict: LlmVerdict
+  reason:  string
 }
 
-// ── Anthropic API ──────────────────────────────────────────────────────────────
+const isVerdictPayload = (x: unknown): x is VerdictPayload => {
+  if (typeof x !== 'object' || x === null) return false
+  const o = x as Record<string, unknown>
+  const v = typeof o.verdict === 'string' ? o.verdict.toLowerCase().trim() : ''
+  return v === 'artist' || v === 'not_artist' || v === 'uncertain'
+}
 
 async function classifyWithClaude(
   candidates: Candidate[],
   venueList: string[],
 ): Promise<ClassificationResult[]> {
+  const client = getHaiku()
   const results: ClassificationResult[] = []
 
   for (const candidate of candidates) {
-    const prompt = buildPrompt(candidate, venueList)
-    let lastError: unknown
+    const payload = await client.askJson<VerdictPayload>({
+      prompt:    buildPrompt(candidate, venueList),
+      maxTokens: 150,
+      validate:  isVerdictPayload,
+      label:     'classify',
+    })
 
-    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-      try {
-        const response = await fetch('https://api.anthropic.com/v1/messages', {
-          method: 'POST',
-          headers: {
-            'Content-Type':      'application/json',
-            'x-api-key':         ANTHROPIC_KEY!,
-            'anthropic-version': '2023-06-01',
-          },
-          body: JSON.stringify({
-            model:      CLAUDE_MODEL,
-            max_tokens: 150,
-            messages: [{ role: 'user', content: prompt }],
-          }),
-        })
-
-        if (!response.ok) {
-          const body = await response.text()
-          throw new Error(`HTTP ${response.status}: ${body}`)
-        }
-
-        const data = await response.json()
-        const text: string = data.content?.[0]?.text ?? ''
-        const parsed = parseVerdict(text)
-        results.push({ id: candidate.id, ...parsed, method: 'llm' })
-        break
-
-      } catch (err) {
-        lastError = err
-        if (attempt < MAX_RETRIES) {
-          const backoff = attempt * 1000
-          process.stderr.write(`  ⚠  Retry ${attempt}/${MAX_RETRIES} for "${candidate.raw_name}" (${backoff}ms)...\n`)
-          await sleep(backoff)
-        }
-      }
+    if (!payload) {
+      results.push({
+        id:      candidate.id,
+        verdict: 'uncertain',
+        reason:  'API error or parse failure — needs manual review',
+        method:  'llm',
+      })
+      continue
     }
 
-    if (results[results.length - 1]?.id !== candidate.id) {
-      console.error(`  ✗  Failed to classify "${candidate.raw_name}" after ${MAX_RETRIES} retries:`, lastError)
-      results.push({ id: candidate.id, verdict: 'uncertain', reason: 'API error — needs manual review', method: 'llm' })
-    }
+    results.push({
+      id:      candidate.id,
+      verdict: payload.verdict,
+      reason:  typeof payload.reason === 'string' ? payload.reason.trim() : 'no reason given',
+      method:  'llm',
+    })
   }
 
   return results
@@ -350,7 +312,6 @@ function fmt(n: number, width = 4): string {
 
 async function main() {
   console.log(`\n🤖  Artist candidate reviewer${DRY_RUN ? '  [DRY RUN]' : ''}`)
-  console.log(`    Model: ${CLAUDE_MODEL}`)
   console.log(`    Confidence levels: ${ALL_CONFIDENCE ? 'high + medium + low' : 'medium + low'}\n`)
 
   // ── 1. Load venues ──────────────────────────────────────────────────────────
@@ -417,8 +378,8 @@ async function main() {
       source:         row.source as 'title' | 'description',
       confidence:     row.confidence as string,
       event_id:       row.event_id as string,
-      title_en:       ev?.title_raw ?? null,
-      description_en: ev?.description ?? null,
+      title_raw:   ev?.title_raw ?? null,
+      description: ev?.description ?? null,
     }
   })
 
@@ -537,6 +498,9 @@ async function main() {
   console.log("    WHERE (confidence = 'high' OR llm_verdict = 'artist')")
   console.log("      AND NOT already_promoted")
   console.log("    ORDER BY event_count DESC;\n")
+
+  // Cost breakdown (no-op if no Haiku calls were made)
+  if (!DRY_RUN) haiku?.logCostSummary()
 }
 
 main().catch(err => {

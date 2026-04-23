@@ -36,6 +36,7 @@
 import fs from 'fs'
 import path from 'path'
 import { createClient } from '@supabase/supabase-js'
+import { createHaikuClient, type HaikuClient } from '../lib/llm/haiku'
 
 // ── Load .env.local ────────────────────────────────────────────────────────────
 const envPath = path.resolve(process.cwd(), '.env.local')
@@ -84,12 +85,17 @@ const supabase = createClient<any>(SUPABASE_URL, SERVICE_KEY, {
 })
 
 // ── Config ─────────────────────────────────────────────────────────────────────
-const CLAUDE_MODEL     = 'claude-haiku-4-5-20251001'
 const REQUEST_DELAY_MS = 600
-const MAX_RETRIES      = 3
 const FETCH_TIMEOUT_MS = 15_000
 const IG_RATE_DELAY_MS = 2_000
 const WEB_RATE_DELAY_MS = 1_000
+
+// Shared Haiku client — lazily instantiated so --dry-run / --skip-llm work without key
+let haiku: HaikuClient | null = null
+function getHaiku(): HaikuClient {
+  if (!haiku) haiku = createHaikuClient({ rateDelayMs: 600 })
+  return haiku
+}
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface Artist {
@@ -243,53 +249,31 @@ Return ONLY valid JSON — no markdown, no extra text:
 }`
 }
 
-function parseSocialLinks(text: string): SocialLinks | null {
-  const cleaned = text
-    .replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '').trim()
-  const start = cleaned.indexOf('{')
-  const end   = cleaned.lastIndexOf('}')
-  if (start === -1 || end === -1) return null
-  try {
-    const p = JSON.parse(cleaned.slice(start, end + 1))
-    return {
-      instagram_url: typeof p.instagram_url === 'string' ? p.instagram_url : null,
-      website_url:   typeof p.website_url   === 'string' ? p.website_url   : null,
-      confidence:    ['high', 'medium', 'low', 'unknown'].includes(p.confidence) ? p.confidence : 'unknown',
-      notes:         typeof p.notes === 'string' ? p.notes : '',
-    }
-  } catch { return null }
+const isSocialLinks = (x: unknown): x is SocialLinks => {
+  if (typeof x !== 'object' || x === null) return false
+  const o = x as Record<string, unknown>
+  const conf = typeof o.confidence === 'string' ? o.confidence : ''
+  if (!['high', 'medium', 'low', 'unknown'].includes(conf)) return false
+  // instagram_url / website_url can be string or null; notes can be any string
+  return true
 }
 
 async function lookUpSocials(artist: Artist): Promise<SocialLinks | null> {
-  const prompt = buildSocialsPrompt(artist)
-  let lastErr: unknown
+  const raw = await getHaiku().askJson<Record<string, unknown>>({
+    prompt:    buildSocialsPrompt(artist),
+    maxTokens: 300,
+    validate:  isSocialLinks,
+    label:     'socials',
+  })
+  if (!raw) return null
 
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      const res = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type':      'application/json',
-          'x-api-key':         ANTHROPIC_KEY!,
-          'anthropic-version': '2023-06-01',
-        },
-        body: JSON.stringify({
-          model:      CLAUDE_MODEL,
-          max_tokens: 300,
-          messages:   [{ role: 'user', content: prompt }],
-        }),
-        signal: AbortSignal.timeout(30_000),
-      })
-      if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`)
-      const data = await res.json()
-      return parseSocialLinks(data.content?.[0]?.text ?? '')
-    } catch (err) {
-      lastErr = err
-      if (attempt < MAX_RETRIES) await sleep(attempt * 1_200)
-    }
+  // Normalise — the validator only checks confidence; coerce the rest here
+  return {
+    instagram_url: typeof raw.instagram_url === 'string' ? raw.instagram_url : null,
+    website_url:   typeof raw.website_url   === 'string' ? raw.website_url   : null,
+    confidence:    raw.confidence as SocialLinks['confidence'],
+    notes:         typeof raw.notes === 'string' ? raw.notes : '',
   }
-  console.error(`   ❌  Claude API failed: ${lastErr}`)
-  return null
 }
 
 // ── Stats ──────────────────────────────────────────────────────────────────────
@@ -490,6 +474,8 @@ async function main() {
   console.log('\n─────────────────────────────────────────────────────')
   console.log(`🏁  Done — ${stats.socialsAdded} socials, ${stats.imagesAdded} images, ` +
               `${stats.noResult} no-data, ${stats.skipped} skipped`)
+
+  if (!DRY_RUN) haiku?.logCostSummary()
 }
 
 main().catch((err) => { console.error('Fatal:', err); process.exit(1) })
