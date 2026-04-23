@@ -501,7 +501,8 @@ async function main() {
     // ── Normalise the token first (strip bullets, truncate at unmatched brackets)
     const normalisedName = normaliseToken(rawC.raw_name)
     // Allow the normalised form through (update raw_name but keep other fields)
-    let c: CandidateRow = normalisedName !== rawC.raw_name
+    // Typed as RawCandidate here — confidence/confidence_reason are added below when pushing to finalRows
+    const c: RawCandidate = normalisedName !== rawC.raw_name
       ? { ...rawC, raw_name: normalisedName }
       : rawC
 
