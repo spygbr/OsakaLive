@@ -1,0 +1,72 @@
+[
+  {
+    "slug": "artist-72fd7cea",
+    "name_en": "”竹原ピストル ライブ 〜バンド編〜”",
+    "name_ja": null,
+    "verdict": "error",
+    "reason": "Spotify search HTTP 403"
+  },
+  {
+    "slug": "warhead",
+    "name_en": "•WARHEAD",
+    "name_ja": null,
+    "verdict": "error",
+    "reason": "Spotify search HTTP 403"
+  },
+  {
+    "slug": "artist-faceb1a0",
+    "name_en": "•流血ブリザード",
+    "name_ja": null,
+    "verdict": "error",
+    "reason": "Spotify search HTTP 403"
+  },
+  {
+    "slug": "1-dialogue",
+    "name_en": "1部(ライブ)： DIALOGUE＋",
+    "name_ja": null,
+    "verdict": "error",
+    "reason": "Spotify search HTTP 403"
+  },
+  {
+    "slug": "3springs",
+    "name_en": "3springs",
+    "name_ja": null,
+    "verdict": "error",
+    "reason": "Spotify search HTTP 403"
+  },
+  {
+    "slug": "4-table",
+    "name_en": "4 table",
+    "name_ja": null,
+    "verdict": "error",
+    "reason": "Spotify search HTTP 403"
+  },
+  {
+    "slug": "5-star-cowboy",
+    "name_en": "5 Star Cowboy",
+    "name_ja": null,
+    "verdict": "error",
+    "reason": "Spotify search HTTP 403"
+  },
+  {
+    "slug": "6eyes",
+    "name_en": "6EYES",
+    "name_ja": null,
+    "verdict": "error",
+    "reason": "Spotify search HTTP 403"
+  },
+  {
+    "slug": "acid-mothers-temple",
+    "name_en": "Acid Mothers Temple",
+    "name_ja": "アシッド・マザーズ・テンプル",
+    "verdict": "error",
+    "reason": "Spotify search HTTP 403"
+  },
+  {
+    "slug": "ad-d",
+    "name_en": "AD d別",
+    "name_ja": null,
+    "verdict": "error",
+    "reason": "Spotify search HTTP 403"
+  }
+]
