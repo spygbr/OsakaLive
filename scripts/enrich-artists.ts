@@ -249,13 +249,12 @@ Return ONLY valid JSON — no markdown, no extra text:
 }`
 }
 
-const isSocialLinks = (x: unknown): x is SocialLinks => {
+const isSocialLinks = (x: unknown): x is Record<string, unknown> => {
   if (typeof x !== 'object' || x === null) return false
   const o = x as Record<string, unknown>
   const conf = typeof o.confidence === 'string' ? o.confidence : ''
-  if (!['high', 'medium', 'low', 'unknown'].includes(conf)) return false
-  // instagram_url / website_url can be string or null; notes can be any string
-  return true
+  // Must have a valid confidence field; instagram_url / website_url can be string or null
+  return ['high', 'medium', 'low', 'unknown'].includes(conf)
 }
 
 async function lookUpSocials(artist: Artist): Promise<SocialLinks | null> {
