@@ -89,6 +89,29 @@ type EventInsert = {
   primary_source_id: string
 }
 
+/**
+ * JS port of the SQL `normalize_title()` function. Used for batch dedup so
+ * the upsert doesn't hit "ON CONFLICT DO UPDATE command cannot affect row a
+ * second time" when two raw titles collapse to the same normalized form.
+ *
+ * Mirrors: full-width → half-width, lowercase, [[:punct:]] → space, collapse
+ * whitespace, trim. Should match the DB function closely enough for dedup.
+ */
+function normalizeTitle(input: string | null | undefined): string {
+  const s = input ?? ''
+  // Full-width ASCII (digits, A-Z, a-z) → half-width; ideographic space → space
+  const half = s.replace(/[\uFF01-\uFF5E\u3000]/g, (c) => {
+    if (c === '\u3000') return ' '
+    return String.fromCharCode(c.charCodeAt(0) - 0xFEE0)
+  })
+  return half
+    .toLowerCase()
+    // ASCII punctuation roughly equivalent to Postgres [[:punct:]]
+    .replace(/[!-/:-@\[-`{-~]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 async function upsertEvents(
   supabase: SupabaseClient,
   sourceId: string,
@@ -96,10 +119,12 @@ async function upsertEvents(
 ): Promise<{ ids: Map<string, string>; upserted: number }> {
   if (rows.length === 0) return { ids: new Map(), upserted: 0 }
 
-  // Dedupe within batch on (venue_id, event_date, title_raw) — title_norm is
-  // computed by the DB but we approximate here with title_raw for batch dedup.
-  const key = (r: EventInsert) => `${r.venue_id}|${r.event_date}|${r.title_raw}`
-  const unique = Array.from(new Map(rows.map((r) => [key(r), r])).values())
+  // Dedupe within batch on (venue_id, event_date, normalize_title(title_raw))
+  // to match the DB unique constraint key. Without this, two raw titles that
+  // collapse to the same normalized form crash the upsert.
+  const normKey = (r: EventInsert) =>
+    `${r.venue_id}|${r.event_date}|${normalizeTitle(r.title_raw)}`
+  const unique = Array.from(new Map(rows.map((r) => [normKey(r), r])).values())
 
   const { data, error } = await supabase
     .from('events')
@@ -107,9 +132,14 @@ async function upsertEvents(
     .select('id, venue_id, event_date, title_raw')
   if (error) throw new Error(`event upsert (${sourceId}): ${error.message}`)
 
+  // Index returned ids by both the raw-title key (for direct lookup by callers)
+  // and the normalized key (so callers whose raw title differs from what the
+  // DB persisted can still find the id).
   const ids = new Map<string, string>()
   for (const r of data ?? []) {
-    ids.set(`${r.venue_id}|${r.event_date}|${r.title_raw}`, r.id as string)
+    const id = r.id as string
+    ids.set(`${r.venue_id}|${r.event_date}|${r.title_raw}`, id)
+    ids.set(`${r.venue_id}|${r.event_date}|norm:${normalizeTitle(r.title_raw)}`, id)
   }
   return { ids, upserted: data?.length ?? 0 }
 }
@@ -120,12 +150,22 @@ async function upsertEventSources(
   records: Array<{ event_id: string; source_url: string; raw_payload: unknown }>,
 ): Promise<void> {
   if (records.length === 0) return
-  const rows = records.map((r) => ({
-    event_id: r.event_id,
-    source_id: sourceId,
-    source_url: r.source_url,
-    raw_payload: r.raw_payload ?? null,
-  }))
+  // Dedupe by (event_id, source_id) — multiple raw titles can resolve to the
+  // same event_id (because they normalize the same), which would otherwise
+  // trip the unique constraint inside one upsert batch.
+  const seen = new Set<string>()
+  const rows: Array<{ event_id: string; source_id: string; source_url: string; raw_payload: unknown }> = []
+  for (const r of records) {
+    const key = `${r.event_id}|${sourceId}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    rows.push({
+      event_id: r.event_id,
+      source_id: sourceId,
+      source_url: r.source_url,
+      raw_payload: r.raw_payload ?? null,
+    })
+  }
   const { error } = await supabase
     .from('event_sources')
     .upsert(rows, { onConflict: 'event_id,source_id', ignoreDuplicates: false })
