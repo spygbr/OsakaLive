@@ -470,10 +470,19 @@ function extractDescriptionTokens(description: string): string[] {
 async function main() {
   console.log(`\n🎸  Artist candidate extractor${DRY_RUN ? '  [DRY RUN]' : ''}\n`)
 
-  // ── 1. Load events ─────────────────────────────────────────────────────────
+  // ── 1. Load events + lineup data from v2 event_sources ────────────────────
+  // Primary source for description candidates: raw_payload.lineup (clean string[])
+  // Fallback: parse events.description as "With X, Y, Z." for events without sources
   const { data: events, error: eventsError } = await supabase
     .from('events')
-    .select('id, title_en, description_en')
+    .select(`
+      id,
+      title_raw,
+      description,
+      event_sources (
+        raw_payload
+      )
+    `)
     .order('event_date')
 
   if (eventsError || !events) {
@@ -517,8 +526,8 @@ async function main() {
   const rawCandidates: RawCandidate[] = []
 
   for (const event of events) {
-    // A. Title
-    const title = event.title_en?.trim() ?? ''
+    // A. Title — v2 uses title_raw
+    const title = (event.title_raw as string | null)?.trim() ?? ''
     if (title) {
       const stripped = stripTitleNoise(title)
       if (stripped.length >= 4) {
@@ -526,14 +535,34 @@ async function main() {
       }
     }
 
-    // B. Description
-    const desc = event.description_en ?? ''
-    if (desc) {
-      const tokens = extractDescriptionTokens(desc)
-      for (const token of tokens) {
-        if (token.length >= 2) {
-          rawCandidates.push({ raw_name: token, source: 'description', event_id: event.id })
+    // B. Lineup candidates — prefer the clean lineup[] array from event_sources.raw_payload
+    //    (v2 scraper stores pre-parsed performers there). Fall back to parsing
+    //    the description string for events not yet migrated to v2 sources.
+    const sources = (event.event_sources as Array<{ raw_payload: Record<string, unknown> | null }> | null) ?? []
+    const lineupArrays = sources
+      .map(s => s.raw_payload?.lineup)
+      .filter(Array.isArray) as string[][]
+
+    let descTokens: string[] = []
+
+    if (lineupArrays.length > 0) {
+      // Flatten all lineup arrays and split on " / " within each entry
+      // (v2 parser sometimes concatenates "BAND A / BAND B" as one entry)
+      for (const lineup of lineupArrays) {
+        for (const entry of lineup) {
+          const parts = (entry as string).split(/\s+\/\s+/).map((p: string) => p.trim()).filter(Boolean)
+          descTokens.push(...parts)
         }
+      }
+    } else {
+      // Fallback: parse "With X, Y, Z." from description for pre-v2 events
+      const desc = (event.description as string | null) ?? ''
+      if (desc) descTokens = extractDescriptionTokens(desc)
+    }
+
+    for (const token of descTokens) {
+      if (token.length >= 2) {
+        rawCandidates.push({ raw_name: token, source: 'description', event_id: event.id })
       }
     }
   }

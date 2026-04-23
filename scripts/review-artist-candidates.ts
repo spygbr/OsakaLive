@@ -384,8 +384,8 @@ async function main() {
       confidence,
       event_id,
       events (
-        title_en,
-        description_en
+        title_raw,
+        description
       )
     `)
     .in('confidence', confidenceLevels)
@@ -410,15 +410,15 @@ async function main() {
   }
 
   const candidates: Candidate[] = rawRows.map((row: Record<string, unknown>) => {
-    const ev = row.events as { title_en?: string | null; description_en?: string | null } | null
+    const ev = row.events as { title_raw?: string | null; description?: string | null } | null
     return {
       id:             row.id as string,
       raw_name:       row.raw_name as string,
       source:         row.source as 'title' | 'description',
       confidence:     row.confidence as string,
       event_id:       row.event_id as string,
-      title_en:       ev?.title_en ?? null,
-      description_en: ev?.description_en ?? null,
+      title_en:       ev?.title_raw ?? null,
+      description_en: ev?.description ?? null,
     }
   })
 
