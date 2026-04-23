@@ -106,8 +106,10 @@ function normalizeTitle(input: string | null | undefined): string {
   })
   return half
     .toLowerCase()
-    // ASCII punctuation roughly equivalent to Postgres [[:punct:]]
-    .replace(/[!-/:-@\[-`{-~]/g, ' ')
+    // Postgres [[:punct:]] under UTF-8 matches Unicode punctuation, not just
+    // ASCII. \p{P} covers Japanese 「」、。・！？etc. \p{S} catches symbols
+    // (★☆♪♥) that some locales also fold. Match both to stay safe.
+    .replace(/[\p{P}\p{S}]/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim()
 }
