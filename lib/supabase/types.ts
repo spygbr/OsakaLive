@@ -253,6 +253,7 @@ export type Database = {
           id: string
           is_featured: boolean
           primary_source_id: string | null
+          slug: string | null
           start_time: string | null
           ticket_price_adv: number | null
           ticket_price_door: number | null
@@ -273,6 +274,7 @@ export type Database = {
           id?: string
           is_featured?: boolean
           primary_source_id?: string | null
+          slug?: string | null
           start_time?: string | null
           ticket_price_adv?: number | null
           ticket_price_door?: number | null
@@ -293,6 +295,7 @@ export type Database = {
           id?: string
           is_featured?: boolean
           primary_source_id?: string | null
+          slug?: string | null
           start_time?: string | null
           ticket_price_adv?: number | null
           ticket_price_door?: number | null

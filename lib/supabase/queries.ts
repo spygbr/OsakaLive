@@ -94,9 +94,17 @@ function normalizeEvent(raw: any): EventWithVenue {
   return {
     ...raw,
     venue: raw.venue ?? null,
-    genres: (raw.event_genres ?? [])
-      .map((eg: any) => eg.genre)
-      .filter(Boolean),
+    // genres now flow through artists.genre_id, not a join table.
+    // Derive distinct genres from the event's artists.
+    genres: (() => {
+      const seen = new Set<string>()
+      const out: { name_en: string; slug: string }[] = []
+      for (const ea of (raw.event_artists ?? [])) {
+        const g = ea.artist?.genre
+        if (g && !seen.has(g.slug)) { seen.add(g.slug); out.push(g) }
+      }
+      return out
+    })(),
     artists: (raw.event_artists ?? [])
       .map((ea: any) => ({ ...ea.artist, billing_order: ea.billing_order ?? 0 }))
       .filter((a: any) => a.name_en)
@@ -112,15 +120,13 @@ function normalizeEvents(raws: any[]): EventWithVenue[] {
 const EVENT_SELECT = `
   *,
   venue:venues(id, name_en, name_ja, slug, address_en, website_url, area:areas(name_en, name_ja, slug)),
-  event_genres(genre:genres(name_en, slug)),
-  event_artists(billing_order, artist:artists(name_en, name_ja, slug, image_url))
+  event_artists(billing_order, artist:artists(name_en, name_ja, slug, image_url, genre:genres(name_en, slug)))
 `
 
 const EVENT_SELECT_FULL = `
   *,
   venue:venues(id, name_en, name_ja, slug, address_en, address_ja, website_url, scrape_url, area:areas(name_en, name_ja, slug)),
-  event_genres(genre:genres(name_en, slug)),
-  event_artists(billing_order, artist:artists(name_en, name_ja, slug, image_url, bio_en))
+  event_artists(billing_order, artist:artists(name_en, name_ja, slug, image_url, bio_en, genre:genres(name_en, slug)))
 `
 
 // ---------------------------------------------------------------------------
@@ -215,7 +221,7 @@ export async function getFilteredEvents(
     }
   }
 
-  // Resolve optional event IDs (genre filter)
+  // Resolve optional event IDs (genre filter — via artist→genre→event)
   let genreEventIds: string[] | null = null
   if (filters.genre) {
     const { data: genreRow } = await supabase
@@ -224,12 +230,18 @@ export async function getFilteredEvents(
       .eq('slug', filters.genre)
       .maybeSingle()
     if (genreRow) {
-      const { data: egRows } = await supabase
-        .from('event_genres')
-        .select('event_id')
+      const { data: artistRows } = await supabase
+        .from('artists')
+        .select('id')
         .eq('genre_id', genreRow.id)
-      genreEventIds = (egRows ?? []).map((eg) => eg.event_id as string)
-      if (genreEventIds.length === 0) return [] // genre exists but has no events
+      const artistIds = (artistRows ?? []).map((a) => a.id as string)
+      if (artistIds.length === 0) return []
+      const { data: eaRows } = await supabase
+        .from('event_artists')
+        .select('event_id')
+        .in('artist_id', artistIds)
+      genreEventIds = Array.from(new Set((eaRows ?? []).map((ea) => ea.event_id as string)))
+      if (genreEventIds.length === 0) return []
     }
   }
 
@@ -305,7 +317,7 @@ export async function getEventsForMonth(
     }
   }
 
-  // Resolve optional event IDs (genre filter)
+  // Resolve optional event IDs (genre filter — via artist→genre→event)
   let genreEventIds: string[] | null = null
   if (filters.genre) {
     const { data: genreRow } = await supabase
@@ -314,11 +326,17 @@ export async function getEventsForMonth(
       .eq('slug', filters.genre)
       .maybeSingle()
     if (genreRow) {
-      const { data: egRows } = await supabase
-        .from('event_genres')
-        .select('event_id')
+      const { data: artistRows } = await supabase
+        .from('artists')
+        .select('id')
         .eq('genre_id', genreRow.id)
-      genreEventIds = (egRows ?? []).map((eg) => eg.event_id as string)
+      const artistIds = (artistRows ?? []).map((a) => a.id as string)
+      if (artistIds.length === 0) return []
+      const { data: eaRows } = await supabase
+        .from('event_artists')
+        .select('event_id')
+        .in('artist_id', artistIds)
+      genreEventIds = Array.from(new Set((eaRows ?? []).map((ea) => ea.event_id as string)))
       if (genreEventIds.length === 0) return []
     }
   }
