@@ -204,8 +204,10 @@ function stripTitleNoise(raw: string): string {
     /\s+ライブ(\s+tour)?\s*$/gi,  // Japanese "live"
     // Trailing year
     /\s+20\d\d\s*$/,
-    // Japanese anniversary
+    // Japanese anniversary / commemoration
     /\d+周年/,
+    /\d+記念/,
+    /記念/,
   ]
 
   for (const re of noiseSegments) {
@@ -232,6 +234,7 @@ function titleHasNoise(raw: string): boolean {
     /\brelease\b/i.test(raw) ||
     /\banniversary\b/i.test(raw) ||
     /周年/.test(raw) ||
+    /記念/.test(raw) ||
     /\btour\b/i.test(raw) ||
     /ツアー/.test(raw) ||
     /\bfestival\b/i.test(raw) ||
