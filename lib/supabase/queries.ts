@@ -33,6 +33,7 @@ export type EventVenue = {
   address_en: string | null
   address_ja?: string | null
   website_url?: string | null
+  scrape_url?: string | null
   area: { name_en: string; name_ja: string; slug: string } | null
 }
 
@@ -40,6 +41,7 @@ export type EventArtist = {
   name_en: string
   name_ja: string | null
   slug: string
+  image_url: string | null
   bio_en?: string | null
   billing_order: number
 }
@@ -111,14 +113,14 @@ const EVENT_SELECT = `
   *,
   venue:venues(id, name_en, name_ja, slug, address_en, website_url, area:areas(name_en, name_ja, slug)),
   event_genres(genre:genres(name_en, slug)),
-  event_artists(billing_order, artist:artists(name_en, name_ja, slug))
+  event_artists(billing_order, artist:artists(name_en, name_ja, slug, image_url))
 `
 
 const EVENT_SELECT_FULL = `
   *,
-  venue:venues(id, name_en, name_ja, slug, address_en, address_ja, website_url, area:areas(name_en, name_ja, slug)),
+  venue:venues(id, name_en, name_ja, slug, address_en, address_ja, website_url, scrape_url, area:areas(name_en, name_ja, slug)),
   event_genres(genre:genres(name_en, slug)),
-  event_artists(billing_order, artist:artists(name_en, name_ja, slug, bio_en))
+  event_artists(billing_order, artist:artists(name_en, name_ja, slug, image_url, bio_en))
 `
 
 // ---------------------------------------------------------------------------

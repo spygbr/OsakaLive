@@ -193,10 +193,10 @@ export default async function EventDetailPage({
                   </h3>
                   <div className="flex flex-col gap-4">
                     {artists.map((artist, i) => (
-                      <div key={artist.slug} className="flex items-center gap-4 group/artist">
+                      <Link key={artist.slug} href={`/artists/${artist.slug}`} className="flex items-center gap-4 group/artist">
                         <div className="w-16 h-16 bg-surface-container-highest relative overflow-hidden shrink-0">
                           <Image
-                            src={placeholderImage(artist.slug, 200, 200)}
+                            src={artist.image_url ?? placeholderImage(artist.slug, 200, 200)}
                             alt={artistName(artist)}
                             fill
                             className="object-cover grayscale group-hover/artist:grayscale-0 transition-all"
@@ -212,7 +212,7 @@ export default async function EventDetailPage({
                           </p>
                         </div>
                         <ChevronRight className="w-6 h-6 text-outline group-hover/artist:text-primary transition-colors" />
-                      </div>
+                      </Link>
                     ))}
                   </div>
                 </div>
@@ -238,7 +238,7 @@ export default async function EventDetailPage({
                     <p className="font-headline font-bold uppercase">{t("event_doorsOpen")}</p>
                   </div>
                   {artists.map((artist, i) => (
-                    <div key={artist.slug} className="relative pl-6">
+                    <Link key={artist.slug} href={`/artists/${artist.slug}`} className="relative pl-6 group/tl">
                       <div
                         className={`absolute w-3 h-3 rounded-full -left-[7.5px] top-1.5 ${
                           i === 0
@@ -252,7 +252,7 @@ export default async function EventDetailPage({
                         {billingLabel(i, artists.length)}
                       </p>
                       <p
-                        className={`font-headline font-bold uppercase ${
+                        className={`font-headline font-bold uppercase group-hover/tl:text-primary transition-colors ${
                           i === 0
                             ? "text-2xl text-primary font-black"
                             : "text-lg"
@@ -260,7 +260,7 @@ export default async function EventDetailPage({
                       >
                         {artistName(artist)}
                       </p>
-                    </div>
+                    </Link>
                   ))}
                 </div>
               </div>
@@ -364,16 +364,30 @@ export default async function EventDetailPage({
                     </div>
                   </div>
 
-                  {venue.website_url && (
-                    <a
-                      href={venue.website_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex-1 border border-outline-variant py-2 font-headline font-bold text-[10px] uppercase tracking-widest hover:bg-surface-container transition-colors text-center block"
-                    >
-                      {t("event_venueWebsite")}
-                    </a>
-                  )}
+                  <div className="flex gap-2">
+                    {venue.website_url && (
+                      <a
+                        href={venue.website_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 border border-outline-variant py-2 font-headline font-bold text-[10px] uppercase tracking-widest hover:bg-surface-container transition-colors text-center"
+                      >
+                        {t("event_venueWebsite")}
+                      </a>
+                    )}
+                    {venue.scrape_url && (
+                      <a
+                        href={venue.scrape_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex-1 border border-outline-variant py-2 font-headline font-bold text-[10px] uppercase tracking-widest hover:bg-surface-container hover:border-primary hover:text-primary transition-colors text-center flex items-center justify-center gap-1"
+                        title="View original event listing source"
+                      >
+                        <ExternalLink className="w-3 h-3 shrink-0" />
+                        Source
+                      </a>
+                    )}
+                  </div>
                 </div>
               )}
 
