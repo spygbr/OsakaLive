@@ -49,15 +49,15 @@ const limitIdx = process.argv.indexOf('--limit')
 const LIMIT: number | null =
   limitIdx !== -1 ? parseInt(process.argv[limitIdx + 1], 10) : null
 
+type Source = 'itunes' | 'wikidata' | 'musicbrainz' | 'unavatar'
+
 const srcIdx = process.argv.indexOf('--sources')
-const ENABLED_SOURCES: Set<Source> = new Set(
+const ENABLED_SOURCES: Set<Source> = new Set<Source>(
   (srcIdx !== -1
-    ? process.argv[srcIdx + 1].split(',').map((s) => s.trim()) as Source[]
-    : ['itunes', 'wikidata', 'musicbrainz', 'unavatar']
+    ? (process.argv[srcIdx + 1].split(',').map((s) => s.trim()) as Source[])
+    : (['itunes', 'wikidata', 'musicbrainz', 'unavatar'] as Source[])
   ).filter(Boolean),
 )
-
-type Source = 'itunes' | 'wikidata' | 'musicbrainz' | 'unavatar'
 
 // ── Supabase ───────────────────────────────────────────────────────────────────
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
