@@ -282,7 +282,7 @@ export async function getAllEventSlugs(): Promise<string[]> {
   const supabase = createServerClient()
   const { data, error } = await supabase.from('events').select('slug')
   if (error) console.error('[getAllEventSlugs]', error.message)
-  return (data ?? []).map((e) => e.slug)
+  return (data ?? []).map((e) => e.slug).filter((s): s is string => s !== null)
 }
 
 /** Events for a given year/month (for the calendar view), with optional area/genre/price filters */
