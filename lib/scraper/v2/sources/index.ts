@@ -17,6 +17,7 @@ import { UDiscoverSource } from './udiscover'
 import { UnionwaySource } from './unionway'
 import { VenueScheduleSource } from './venue'
 import { ClubJouleSource } from './club-joule'
+import { DropSource } from './drop'
 
 /** id → constructor for hand-coded aggregator sources. */
 const AGGREGATOR_REGISTRY: Record<string, () => Source> = {
@@ -37,6 +38,7 @@ const VENUE_OVERRIDES: Record<
   (args: { baseUrl: string; venueId: string }) => Source
 > = {
   'venue:club-joule': (a) => new ClubJouleSource(a),
+  'venue:drop':       (a) => new DropSource(a),
 }
 
 type SourceRowDb = {
