@@ -92,6 +92,37 @@ function slugify(name: string): string {
     .slice(0, 60)
 }
 
+// ── Bilingual name parsing ─────────────────────────────────────────────────────
+
+/** True if the string contains at least one Japanese character */
+function hasJapanese(s: string): boolean {
+  return /[\u3040-\u30FF\u3400-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF]/.test(s)
+}
+
+/** True if the string is purely Roman/ASCII */
+function isRoman(s: string): boolean {
+  return /^[A-Za-z0-9\s\-_.!?'"&+*()[\]]+$/.test(s.trim())
+}
+
+/**
+ * If displayName is a bilingual "JP名 / EN Name" (or "EN / JP") string,
+ * returns { nameEn, nameJa }. Otherwise returns { nameEn: displayName, nameJa: null }.
+ *
+ * The English part is used for slug generation and as name_en.
+ * The Japanese part is stored in name_ja.
+ */
+function parseBilingualName(displayName: string): { nameEn: string; nameJa: string | null } {
+  const parts = displayName.split(/\s+\/\s+/)
+  if (parts.length !== 2) return { nameEn: displayName, nameJa: null }
+
+  const [a, b] = parts.map(p => p.trim())
+  if (!a || !b) return { nameEn: displayName, nameJa: null }
+
+  if (hasJapanese(a) && isRoman(b)) return { nameEn: b, nameJa: a }
+  if (isRoman(a) && hasJapanese(b)) return { nameEn: a, nameJa: b }
+  return { nameEn: displayName, nameJa: null }  // both same script
+}
+
 function randomHex(bytes = 4): string {
   return [...Array(bytes * 2)]
     .map(() => Math.floor(Math.random() * 16).toString(16))
@@ -209,7 +240,12 @@ async function main() {
     let artistId: string
     let isNew = false
 
-    const existingArtist = artistByName.get(nameKey)
+    // Parse bilingual names ("JP名 / EN Name") into separate components
+    const { nameEn, nameJa } = parseBilingualName(displayName)
+    const enKey = nameEn.toLowerCase().trim()
+
+    // Dedup: check by full normalised name first, then by English part alone
+    const existingArtist = artistByName.get(nameKey) ?? artistByName.get(enKey)
 
     if (existingArtist) {
       artistId = existingArtist.id
@@ -218,22 +254,22 @@ async function main() {
         dryRunLog.push(`  [EXISTS ] "${displayName}" → slug="${existingArtist.slug}" id=${artistId}`)
       }
     } else {
-      // Need to create a new artist row
-      const slug = uniqueSlug(displayName, existingSlugs)
+      // Slug is generated from the English name (or full name if no bilingual split)
+      const slug = uniqueSlug(nameEn, existingSlugs)
       isNew = true
 
       if (DRY_RUN) {
-        // Simulate an ID for dry-run event_artists preview
         artistId = `<new-${slug}>`
-        dryRunLog.push(`  [CREATE ] "${displayName}" → slug="${slug}"`)
-        existingSlugs.add(slug)  // prevent collisions within this dry run
-        artistByName.set(nameKey, { id: artistId, name_en: displayName, slug })
+        const jaNote = nameJa ? ` (ja: "${nameJa}")` : ''
+        dryRunLog.push(`  [CREATE ] "${nameEn}"${jaNote} → slug="${slug}"`)
+        existingSlugs.add(slug)
+        artistByName.set(nameKey, { id: artistId, name_en: nameEn, slug })
       } else {
         const { data: newArtist, error: insertError } = await supabase
           .from('artists')
           .insert({
-            name_en:   displayName,
-            name_ja:   null,
+            name_en:   nameEn,
+            name_ja:   nameJa,
             slug,
             bio_en:    null,
             genre_id:  null,
@@ -250,6 +286,7 @@ async function main() {
         artistId = newArtist.id
         existingSlugs.add(slug)
         artistByName.set(nameKey, newArtist as ArtistRow)
+        artistByName.set(enKey, newArtist as ArtistRow)  // also index by EN part for future dedup
         artistsCreated++
       }
     }
@@ -264,8 +301,15 @@ async function main() {
     // Very short names (<3 chars) would match too much noise — skip.
     const eventBillingMap = new Map<string, number>()
 
-    if (displayName.length >= 3) {
-      const needle = displayName.replace(/[\\%_]/g, (m) => `\\${m}`)
+    // Build search needles: for bilingual names, search for BOTH language parts
+    // individually (events store one or the other, not the combined "JP / EN" string)
+    const searchTerms: string[] = []
+    if (nameJa && nameJa.length >= 2) searchTerms.push(nameJa)
+    if (nameEn.length >= 3) searchTerms.push(nameEn)
+    // Fallback: if not bilingual, searchTerms has just nameEn (= displayName)
+
+    for (const term of searchTerms) {
+      const needle = term.replace(/[\\%_]/g, (m) => `\\${m}`)
 
       // Title matches get billing_order 1
       const { data: titleHits, error: titleErr } = await supabase
@@ -273,9 +317,9 @@ async function main() {
         .select('id')
         .ilike('title_raw', `%${needle}%`)
         .limit(200)
-      if (titleErr) console.warn(`  ⚠  events title lookup for "${displayName}": ${titleErr.message}`)
+      if (titleErr) console.warn(`  ⚠  events title lookup for "${term}": ${titleErr.message}`)
       for (const ev of (titleHits ?? []) as Array<{ id: string }>) {
-        eventBillingMap.set(ev.id, 1)
+        if (!eventBillingMap.has(ev.id)) eventBillingMap.set(ev.id, 1)
       }
 
       // Description matches get billing_order 2 (don't overwrite a title hit)
@@ -284,7 +328,7 @@ async function main() {
         .select('id')
         .ilike('description', `%${needle}%`)
         .limit(200)
-      if (descErr) console.warn(`  ⚠  events desc lookup for "${displayName}": ${descErr.message}`)
+      if (descErr) console.warn(`  ⚠  events desc lookup for "${term}": ${descErr.message}`)
       for (const ev of (descHits ?? []) as Array<{ id: string }>) {
         if (!eventBillingMap.has(ev.id)) eventBillingMap.set(ev.id, 2)
       }

@@ -168,6 +168,33 @@ const PRICING_PATTERNS: RegExp[] = [
 /** Japanese particles in the middle of a string → phrase, not a name */
 const JP_PARTICLES_MID = /[のはをがでにへと].+/
 
+// ── Bilingual name detection ───────────────────────────────────────────────────
+
+/** True if the string contains at least one Japanese character (Hiragana/Katakana/Kanji) */
+function hasJapaneseChars(s: string): boolean {
+  return /[\u3040-\u30FF\u3400-\u9FFF\uF900-\uFAFF\uFF00-\uFFEF]/.test(s)
+}
+
+/** True if the string is purely Roman/ASCII — letters, digits, common punctuation */
+function isRomanScript(s: string): boolean {
+  return /^[A-Za-z0-9\s\-_.!?'"&+*()[\]]+$/.test(s.trim())
+}
+
+/**
+ * Detect a bilingual entry like "バンド名 / Band Name" or "Band Name / バンド名".
+ * Returns { nameJa, nameEn } when one side is Japanese and the other is Roman.
+ * Returns null when both sides are the same script (= two separate acts to split normally).
+ */
+function parseBilingualEntry(entry: string): { nameJa: string; nameEn: string } | null {
+  const parts = entry.split(/\s+\/\s+/)
+  if (parts.length !== 2) return null
+  const [a, b] = parts.map(p => p.trim())
+  if (!a || !b) return null
+  if (hasJapaneseChars(a) && isRomanScript(b)) return { nameJa: a, nameEn: b }
+  if (isRomanScript(a) && hasJapaneseChars(b)) return { nameJa: b, nameEn: a }
+  return null  // both same script → two separate acts
+}
+
 // ── Venue lookup ───────────────────────────────────────────────────────────────
 
 const MIN_VENUE_TOKEN_LEN = 3
@@ -344,6 +371,13 @@ function scoreToken(
       return { confidence: 'medium', reason: `Japanese text, ${token.trim().length} chars` }
     }
     return { confidence: 'low', reason: 'Japanese with particles (likely phrase)' }
+  }
+
+  // Bilingual artist name: "JP名 / EN Name" or "EN Name / JP名"
+  // One side is Japanese, the other is Roman — strong signal this is one artist
+  // with both scripts. Score as medium; frequency boost still applies above.
+  if (token.includes(' / ') && parseBilingualEntry(token) !== null) {
+    return { confidence: 'medium', reason: 'bilingual JP/EN artist name' }
   }
 
   // Mixed script or unrecognised pattern
@@ -547,12 +581,21 @@ async function main() {
     let descTokens: string[] = []
 
     if (lineupArrays.length > 0) {
-      // Flatten all lineup arrays and split on " / " within each entry
-      // (v2 parser sometimes concatenates "BAND A / BAND B" as one entry)
+      // Flatten all lineup arrays. Within each entry, split on " / " — but first
+      // check if it's a bilingual "JP名 / EN Name" pair. If so, keep as one token
+      // (the promoter will parse it into name_en + name_ja). Only split when BOTH
+      // parts are the same script (= genuinely two separate acts).
       for (const lineup of lineupArrays) {
         for (const entry of lineup) {
-          const parts = (entry as string).split(/\s+\/\s+/).map((p: string) => p.trim()).filter(Boolean)
-          descTokens.push(...parts)
+          const raw = (entry as string).trim()
+          const bilingual = parseBilingualEntry(raw)
+          if (bilingual) {
+            // Keep the full bilingual string as a single candidate token
+            descTokens.push(raw)
+          } else {
+            const parts = raw.split(/\s+\/\s+/).map((p: string) => p.trim()).filter(Boolean)
+            descTokens.push(...parts)
+          }
         }
       }
     } else {
