@@ -67,6 +67,7 @@ export type EventWithVenue = {
   description_ja: string | null
   is_featured: boolean | null
   ticket_url: string | null
+  source_url: string | null
   venue: EventVenue | null
   genres: EventGenre[]
   artists: EventArtist[]
@@ -93,6 +94,7 @@ export type ArtistWithGenre = {
 function normalizeEvent(raw: any): EventWithVenue {
   return {
     ...raw,
+    source_url: (raw.event_sources?.[0]?.source_url) ?? null,
     venue: raw.venue ?? null,
     // genres now flow through artists.genre_id, not a join table.
     // Derive distinct genres from the event's artists.
@@ -126,7 +128,8 @@ const EVENT_SELECT = `
 const EVENT_SELECT_FULL = `
   *,
   venue:venues(id, name_en, name_ja, slug, address_en, address_ja, website_url, scrape_url, area:areas(name_en, name_ja, slug)),
-  event_artists(billing_order, artist:artists(name_en, name_ja, slug, image_url, bio_en, genre:genres(name_en, slug)))
+  event_artists(billing_order, artist:artists(name_en, name_ja, slug, image_url, bio_en, genre:genres(name_en, slug))),
+  event_sources(source_url)
 `
 
 // ---------------------------------------------------------------------------
