@@ -111,8 +111,11 @@ function isRoman(s: string): boolean {
  * The English part is used for slug generation and as name_en.
  * The Japanese part is stored in name_ja.
  */
+// Matches both full-width ／ (U+FF0F) and ASCII /, with optional surrounding spaces
+const BILINGUAL_SEP = /\s*[／/]\s*/
+
 function parseBilingualName(displayName: string): { nameEn: string; nameJa: string | null } {
-  const parts = displayName.split(/\s+\/\s+/)
+  const parts = displayName.split(BILINGUAL_SEP)
   if (parts.length !== 2) return { nameEn: displayName, nameJa: null }
 
   const [a, b] = parts.map(p => p.trim())

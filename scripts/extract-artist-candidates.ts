@@ -181,12 +181,19 @@ function isRomanScript(s: string): boolean {
 }
 
 /**
- * Detect a bilingual entry like "バンド名 / Band Name" or "Band Name / バンド名".
+ * Splits on bilingual separators: ASCII " / " or full-width "／" (U+FF0F),
+ * with or without surrounding spaces.
+ */
+const BILINGUAL_SEP = /\s*[／/]\s*/
+
+/**
+ * Detect a bilingual entry like "バンド名／Band Name", "エリック・マーティン／Eric Martin",
+ * or "Band Name / バンド名". Handles both full-width ／ and ASCII /.
  * Returns { nameJa, nameEn } when one side is Japanese and the other is Roman.
  * Returns null when both sides are the same script (= two separate acts to split normally).
  */
 function parseBilingualEntry(entry: string): { nameJa: string; nameEn: string } | null {
-  const parts = entry.split(/\s+\/\s+/)
+  const parts = entry.split(BILINGUAL_SEP)
   if (parts.length !== 2) return null
   const [a, b] = parts.map(p => p.trim())
   if (!a || !b) return null
@@ -373,10 +380,9 @@ function scoreToken(
     return { confidence: 'low', reason: 'Japanese with particles (likely phrase)' }
   }
 
-  // Bilingual artist name: "JP名 / EN Name" or "EN Name / JP名"
-  // One side is Japanese, the other is Roman — strong signal this is one artist
-  // with both scripts. Score as medium; frequency boost still applies above.
-  if (token.includes(' / ') && parseBilingualEntry(token) !== null) {
+  // Bilingual artist name: "JP名／EN Name", "エリック・マーティン／Eric Martin", etc.
+  // Handles both full-width ／ and ASCII /. One side Japanese, other Roman.
+  if (/[／/]/.test(token) && parseBilingualEntry(token) !== null) {
     return { confidence: 'medium', reason: 'bilingual JP/EN artist name' }
   }
 
@@ -593,7 +599,7 @@ async function main() {
             // Keep the full bilingual string as a single candidate token
             descTokens.push(raw)
           } else {
-            const parts = raw.split(/\s+\/\s+/).map((p: string) => p.trim()).filter(Boolean)
+            const parts = raw.split(BILINGUAL_SEP).map((p: string) => p.trim()).filter(Boolean)
             descTokens.push(...parts)
           }
         }
