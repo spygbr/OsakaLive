@@ -647,7 +647,10 @@ async function getSpotifyToken(): Promise<string | null> {
   if (_spotifyToken) return _spotifyToken
   const cid = process.env.SPOTIFY_CLIENT_ID
   const sec = process.env.SPOTIFY_CLIENT_SECRET
-  if (!cid || !sec) return null
+  if (!cid || !sec) {
+    console.log('   [spotify] skipped — SPOTIFY_CLIENT_ID/SECRET not set in .env.local')
+    return null
+  }
   try {
     const res = await fetch('https://accounts.spotify.com/api/token', {
       method: 'POST',
@@ -658,16 +661,26 @@ async function getSpotifyToken(): Promise<string | null> {
       body: 'grant_type=client_credentials',
       signal: AbortSignal.timeout(10_000),
     })
-    if (!res.ok) return null
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      console.log(`   [spotify] token fetch failed — HTTP ${res.status}${body ? `: ${body.slice(0, 120)}` : ''}`)
+      return null
+    }
     const json = await res.json() as { access_token?: string }
     _spotifyToken = json.access_token ?? null
+    if (!_spotifyToken) console.log('   [spotify] token endpoint returned no access_token')
+    else console.log('   [spotify] ✓ token acquired')
     return _spotifyToken
-  } catch { return null }
+  } catch (err) {
+    console.log(`   [spotify] token fetch threw: ${err}`)
+    return null
+  }
 }
 
 async function searchSpotify(artist: Artist): Promise<RawCandidate[]> {
   const token = await getSpotifyToken()
   if (!token) return []
+  // Token is available — any silent failures after this point will be surfaced
   type SpotifyArtist = { id: string; name: string; images: { url: string; width?: number; height?: number }[]; genres: string[] }
   const seen = new Set<string>()
   const out: RawCandidate[] = []
@@ -681,9 +694,14 @@ async function searchSpotify(artist: Artist): Promise<RawCandidate[]> {
           headers: { Authorization: `Bearer ${token}` },
           signal: AbortSignal.timeout(12_000),
         })
-        if (!res.ok) continue
+        if (!res.ok) {
+          process.stderr.write(`   [spotify] search HTTP ${res.status} (q="${q}" market="${market}")\n`)
+          continue
+        }
         const json = await res.json() as { artists?: { items: SpotifyArtist[] } }
-        for (const a of json.artists?.items ?? []) {
+        const hits = json.artists?.items ?? []
+        if (!hits.length) process.stderr.write(`   [spotify] 0 results (q="${q}" market="${market || 'global'}")\n`)
+        for (const a of hits) {
           if (seen.has(a.id) || !a.images.length) continue
           if (scoreName(artist, a.name) === 0) continue
           seen.add(a.id)
@@ -698,7 +716,7 @@ async function searchSpotify(artist: Artist): Promise<RawCandidate[]> {
             notes:     market ? `market=${market}` : 'market=global',
           })
         }
-      } catch { /* swallow */ }
+      } catch (err) { process.stderr.write(`   [spotify] search threw (q="${q}" market="${market || 'global'}"): ${err}\n`) }
       await sleep(200)
     }
   }

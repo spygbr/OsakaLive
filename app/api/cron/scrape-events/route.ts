@@ -20,6 +20,11 @@ import { loadSources } from '@/lib/scraper/v2/sources'
 import { loadVenueIndex } from '@/lib/scraper/v2/venue-resolver'
 
 export const maxDuration = 60
+// Pin cron egress to Tokyo. Several JP venues (sunhall.jp) silently drop
+// connections from US-East datacenter IPs — connect times out at ~10s every
+// run. Running from hnd1 puts us on a JP-routed egress, which the WAFs accept.
+// This only affects this route; user-facing pages stay on the default region.
+export const preferredRegion = 'hnd1'
 
 export async function GET(req: NextRequest) {
   // ── Auth ────────────────────────────────────────────────────────────────
