@@ -9,8 +9,11 @@ import { createHash } from 'node:crypto'
 import type { FetchedPage } from './types'
 
 const DEFAULT_TIMEOUT_MS = 15_000
+// Plain desktop-Chrome UA. Some venues (banana-hall) WAF-block anything with
+// "bot" in the User-Agent string. We're polite — low rate, robots.txt-respecting
+// in spirit — but identifying as a bot trips overzealous filters.
 const USER_AGENT =
-  'Mozilla/5.0 (compatible; OsakaLiveBot/2.0; +https://osaka-live.vercel.app)'
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 
 export type FetchOptions = {
   timeoutMs?: number

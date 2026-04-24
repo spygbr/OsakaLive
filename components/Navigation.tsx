@@ -51,6 +51,12 @@ export function TopNav() {
           >
             {t("nav_tickets")}
           </Link>
+          <Link
+            href="/guide"
+            className={`${pathname === "/guide" ? "text-primary border-b-2 border-primary pb-1 translate-y-[1px]" : "text-[#cecece] hover:text-primary transition-colors"}`}
+          >
+            {t("nav_guide")}
+          </Link>
           <button
             onClick={toggle}
             className="text-[#cecece] hover:text-primary transition-colors border border-outline-variant px-2 py-0.5 text-xs font-bold hover:border-primary active:scale-95"

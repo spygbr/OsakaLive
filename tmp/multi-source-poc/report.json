@@ -1,185 +1,145 @@
 [
   {
-    "slug": "artist-72fd7cea",
-    "name_en": "”竹原ピストル ライブ 〜バンド編〜”",
+    "slug": "stdrumstokyo",
+    "name_en": "#STDRUMS(Tokyo)",
     "name_ja": null,
     "winner": null,
     "candidates": [],
     "verdict": "miss"
   },
   {
-    "slug": "warhead",
-    "name_en": "•WARHEAD",
+    "slug": "adipocere-necrophilia",
+    "name_en": "ADIPOCERE NECROPHILIA",
     "name_ja": null,
     "winner": null,
     "candidates": [],
     "verdict": "miss"
   },
   {
-    "slug": "artist-faceb1a0",
-    "name_en": "•流血ブリザード",
+    "slug": "aile-the-shota",
+    "name_en": "Aile The Shota",
     "name_ja": null,
     "winner": {
       "source": "itunes",
-      "sourceId": "1648854698",
-      "sourceUrl": "https://music.apple.com/jp/album/my-sweet-home-osaka-single/1743124196?uo=4",
-      "imageUrl": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/00/65/1f/00651f0d-8c8f-abf4-f95f-c701b9a0bdd0/0198448255653_cover.png/1200x1200bb.jpg",
+      "sourceId": "1589727968",
+      "sourceUrl": "https://music.apple.com/jp/album/aurora-tokio-single/1599652125?uo=4",
+      "imageUrl": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/63/bb/d8/63bbd8b1-9557-923e-b6e4-1bec65d7e82a/21UM1IM54119.rgb.jpg/1200x1200bb.jpg",
       "width": 1200,
       "height": 1200,
-      "matchName": "流血ブリザード",
+      "matchName": "Aile The Shota",
       "matchScore": 1,
-      "notes": "album artwork: \"My Sweet Home Osaka - Single\""
+      "notes": "album artwork: \"AURORA TOKIO - Single\""
     },
     "candidates": [
       {
         "source": "itunes",
-        "sourceId": "1648854698",
-        "sourceUrl": "https://music.apple.com/jp/album/my-sweet-home-osaka-single/1743124196?uo=4",
-        "imageUrl": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/00/65/1f/00651f0d-8c8f-abf4-f95f-c701b9a0bdd0/0198448255653_cover.png/1200x1200bb.jpg",
+        "sourceId": "1589727968",
+        "sourceUrl": "https://music.apple.com/jp/album/aurora-tokio-single/1599652125?uo=4",
+        "imageUrl": "https://is1-ssl.mzstatic.com/image/thumb/Music116/v4/63/bb/d8/63bbd8b1-9557-923e-b6e4-1bec65d7e82a/21UM1IM54119.rgb.jpg/1200x1200bb.jpg",
         "width": 1200,
         "height": 1200,
-        "matchName": "流血ブリザード",
+        "matchName": "Aile The Shota",
         "matchScore": 1,
-        "notes": "album artwork: \"My Sweet Home Osaka - Single\""
-      },
-      {
-        "source": "itunes",
-        "sourceId": "379589171",
-        "sourceUrl": "https://music.apple.com/jp/album/%E3%82%8F%E3%81%97%E3%81%AE%E3%82%A4%E3%83%81%E3%83%A2%E3%83%84/379589169?uo=4",
-        "imageUrl": "https://is1-ssl.mzstatic.com/image/thumb/Music/c5/b5/97/mzi.gftlxqoc.jpg/1200x1200bb.jpg",
-        "width": 1200,
-        "height": 1200,
-        "matchName": "流血ブリザード",
-        "matchScore": 1,
-        "notes": "album artwork: \"わしのイチモツ\""
+        "notes": "album artwork: \"AURORA TOKIO - Single\""
       }
     ],
     "verdict": "hit"
   },
   {
-    "slug": "1-dialogue",
-    "name_en": "1部(ライブ)： DIALOGUE＋",
+    "slug": "aim-for-one",
+    "name_en": "Aim for One",
     "name_ja": null,
     "winner": {
       "source": "itunes",
-      "sourceId": "1480492827",
-      "sourceUrl": "https://music.apple.com/jp/album/%E3%83%A6%E3%83%BC%E3%83%88%E3%83%94%E3%82%A2%E5%AD%A6%E6%A6%82%E8%AB%96-ep/1735883578?uo=4",
-      "imageUrl": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/23/7b/97/237b976a-34b6-c8ff-a5a9-324b9359876d/PCCG_02354_A.jpg/1200x1200bb.jpg",
+      "sourceId": "1759088313",
+      "sourceUrl": "https://music.apple.com/jp/album/one-shot-single/1781831332?uo=4",
+      "imageUrl": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/1d/b9/57/1db95780-7118-25d1-81de-f8a6bb658e67/4571640490828_cover.jpg/1200x1200bb.jpg",
       "width": 1200,
       "height": 1200,
-      "matchName": "DIALOGUE+",
-      "matchScore": 0.85,
-      "notes": "album artwork: \"ユートピア学概論 - EP\""
+      "matchName": "Aim for One",
+      "matchScore": 1,
+      "notes": "album artwork: \"One Shot - Single\""
     },
     "candidates": [
       {
         "source": "itunes",
-        "sourceId": "1480492827",
-        "sourceUrl": "https://music.apple.com/jp/album/%E3%83%A6%E3%83%BC%E3%83%88%E3%83%94%E3%82%A2%E5%AD%A6%E6%A6%82%E8%AB%96-ep/1735883578?uo=4",
-        "imageUrl": "https://is1-ssl.mzstatic.com/image/thumb/Music211/v4/23/7b/97/237b976a-34b6-c8ff-a5a9-324b9359876d/PCCG_02354_A.jpg/1200x1200bb.jpg",
+        "sourceId": "1759088313",
+        "sourceUrl": "https://music.apple.com/jp/album/one-shot-single/1781831332?uo=4",
+        "imageUrl": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/1d/b9/57/1db95780-7118-25d1-81de-f8a6bb658e67/4571640490828_cover.jpg/1200x1200bb.jpg",
         "width": 1200,
         "height": 1200,
-        "matchName": "DIALOGUE+",
-        "matchScore": 0.85,
-        "notes": "album artwork: \"ユートピア学概論 - EP\""
+        "matchName": "Aim for One",
+        "matchScore": 1,
+        "notes": "album artwork: \"One Shot - Single\""
       }
     ],
     "verdict": "hit"
   },
   {
-    "slug": "3springs",
-    "name_en": "3springs",
-    "name_ja": null,
-    "winner": null,
-    "candidates": [],
-    "verdict": "miss"
-  },
-  {
-    "slug": "4-table",
-    "name_en": "4 table",
-    "name_ja": null,
-    "winner": null,
-    "candidates": [],
-    "verdict": "miss"
-  },
-  {
-    "slug": "5-star-cowboy",
-    "name_en": "5 Star Cowboy",
-    "name_ja": null,
-    "winner": null,
-    "candidates": [],
-    "verdict": "miss"
-  },
-  {
-    "slug": "6eyes",
-    "name_en": "6EYES",
+    "slug": "all-jack",
+    "name_en": "All Jack",
     "name_ja": null,
     "winner": {
       "source": "itunes",
-      "sourceId": "259812750",
-      "sourceUrl": "https://music.apple.com/jp/album/nipponjin-chunendansei-single/1850615943?uo=4",
-      "imageUrl": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/62/f1/91/62f19136-11f1-57aa-7bad-737727be74cd/4550713445026_cover.png/1200x1200bb.jpg",
+      "sourceId": "1830651142",
+      "sourceUrl": "https://music.apple.com/jp/album/all-jack-single/1830651140?uo=4",
+      "imageUrl": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/7c/7c/8c/7c7c8cce-fec4-1819-0a94-56ca588f72a7/4550711313693_cover.png/1200x1200bb.jpg",
       "width": 1200,
       "height": 1200,
-      "matchName": "6EYES",
+      "matchName": "All Jack",
       "matchScore": 1,
-      "notes": "album artwork: \"Nipponjin Chunendansei - Single\""
+      "notes": "album artwork: \"All Jack - Single\""
     },
     "candidates": [
       {
         "source": "itunes",
-        "sourceId": "259812750",
-        "sourceUrl": "https://music.apple.com/jp/album/nipponjin-chunendansei-single/1850615943?uo=4",
-        "imageUrl": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/62/f1/91/62f19136-11f1-57aa-7bad-737727be74cd/4550713445026_cover.png/1200x1200bb.jpg",
+        "sourceId": "1830651142",
+        "sourceUrl": "https://music.apple.com/jp/album/all-jack-single/1830651140?uo=4",
+        "imageUrl": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/7c/7c/8c/7c7c8cce-fec4-1819-0a94-56ca588f72a7/4550711313693_cover.png/1200x1200bb.jpg",
         "width": 1200,
         "height": 1200,
-        "matchName": "6EYES",
+        "matchName": "All Jack",
         "matchScore": 1,
-        "notes": "album artwork: \"Nipponjin Chunendansei - Single\""
+        "notes": "album artwork: \"All Jack - Single\""
       }
     ],
     "verdict": "hit"
   },
   {
-    "slug": "acid-mothers-temple",
-    "name_en": "Acid Mothers Temple",
-    "name_ja": "アシッド・マザーズ・テンプル",
-    "winner": {
-      "source": "wikidata",
-      "sourceId": "Q341385",
-      "sourceUrl": "https://www.wikidata.org/wiki/Q341385",
-      "imageUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Acid_Mothers_Temple_%40_Night_%26_Day_Cafe%2C_Manchester_21-10-2012...._(8112184305).jpg?width=1200",
-      "matchName": "Acid Mothers Temple",
-      "matchScore": 1,
-      "notes": "Japanese psychedelic rock band"
-    },
-    "candidates": [
-      {
-        "source": "itunes",
-        "sourceId": "53888263",
-        "sourceUrl": "https://music.apple.com/jp/album/live-in-castell%C3%B3n-live/1224011187?uo=4",
-        "imageUrl": "https://is1-ssl.mzstatic.com/image/thumb/Music122/v4/44/1c/b0/441cb059-889c-28ec-34de-82de1c20b868/8433391384701.jpg/1200x1200bb.jpg",
-        "width": 1200,
-        "height": 1200,
-        "matchName": "Acid Mothers Temple",
-        "matchScore": 1,
-        "notes": "album artwork: \"Live in Castellón (Live)\""
-      },
-      {
-        "source": "wikidata",
-        "sourceId": "Q341385",
-        "sourceUrl": "https://www.wikidata.org/wiki/Q341385",
-        "imageUrl": "https://commons.wikimedia.org/wiki/Special:FilePath/Acid_Mothers_Temple_%40_Night_%26_Day_Cafe%2C_Manchester_21-10-2012...._(8112184305).jpg?width=1200",
-        "matchName": "Acid Mothers Temple",
-        "matchScore": 1,
-        "notes": "Japanese psychedelic rock band"
-      }
-    ],
-    "verdict": "hit"
+    "slug": "amidagaran",
+    "name_en": "AMIDAGARAN",
+    "name_ja": null,
+    "winner": null,
+    "candidates": [],
+    "verdict": "miss"
   },
   {
-    "slug": "ad-d",
-    "name_en": "AD d別",
+    "slug": "b",
+    "name_en": "B・佐藤慎之介",
+    "name_ja": null,
+    "winner": null,
+    "candidates": [],
+    "verdict": "miss"
+  },
+  {
+    "slug": "blondnewhalf",
+    "name_en": "BLONDnewHALF",
+    "name_ja": null,
+    "winner": null,
+    "candidates": [],
+    "verdict": "miss"
+  },
+  {
+    "slug": "bogulta",
+    "name_en": "BOGULTA",
+    "name_ja": null,
+    "winner": null,
+    "candidates": [],
+    "verdict": "miss"
+  },
+  {
+    "slug": "bonnounomukuro",
+    "name_en": "Bonnounomukuro + マリヲ",
     "name_ja": null,
     "winner": null,
     "candidates": [],

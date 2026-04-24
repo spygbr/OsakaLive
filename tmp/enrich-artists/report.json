@@ -1,0 +1,400 @@
+[
+  {
+    "slug": "stdrumstokyo",
+    "name_en": "#STDRUMS(Tokyo)",
+    "name_ja": null,
+    "verdict": "hit",
+    "winner": {
+      "sourceId": "14734157",
+      "sourceUrl": "https://www.deezer.com/artist/14734157",
+      "imageUrl": "https://cdn-images.dzcdn.net/images/artist//1000x1000-000000-80-0-0.jpg",
+      "width": 1000,
+      "height": 1000,
+      "matchName": "#STDRUMS",
+      "source": "deezer",
+      "nameScore": 0.85,
+      "finalScore": 0.9075,
+      "crossVal": true
+    },
+    "updates": {
+      "website_url": "http://stdrums.rerure.com/"
+    },
+    "candidates": [
+      {
+        "sourceId": "14734157",
+        "sourceUrl": "https://www.deezer.com/artist/14734157",
+        "imageUrl": "https://cdn-images.dzcdn.net/images/artist//1000x1000-000000-80-0-0.jpg",
+        "width": 1000,
+        "height": 1000,
+        "matchName": "#STDRUMS",
+        "source": "deezer",
+        "nameScore": 0.85,
+        "finalScore": 0.9075,
+        "crossVal": true
+      },
+      {
+        "sourceId": "278729211",
+        "sourceUrl": "https://www.deezer.com/artist/278729211",
+        "imageUrl": "https://cdn-images.dzcdn.net/images/artist//1000x1000-000000-80-0-0.jpg",
+        "width": 1000,
+        "height": 1000,
+        "matchName": "STDRUMS",
+        "source": "deezer",
+        "nameScore": 0.85,
+        "finalScore": 0.9075,
+        "crossVal": true
+      },
+      {
+        "sourceId": "7240778",
+        "sourceUrl": "https://www.discogs.com/artist/7240778",
+        "imageUrl": "https://i.discogs.com/JYDolBNS4rOSlJxjFde234R2n4Yb1j0WjWJH-IFh9Eo/rs:fit/g:sm/q:90/h:600/w:600/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9BLTcyNDA3/NzgtMTcxODcwNTI5/MS02MDM4LmpwZWc.jpeg",
+        "width": 600,
+        "height": 600,
+        "matchName": "#STDRUMS",
+        "websiteUrl": "http://stdrums.rerure.com/",
+        "source": "discogs",
+        "nameScore": 0.85,
+        "finalScore": 0.865,
+        "crossVal": true
+      },
+      {
+        "sourceId": "1650100956",
+        "sourceUrl": "https://music.apple.com/jp/album/business-in-shibuya-for-subsc-live/1516097931?uo=4",
+        "imageUrl": "https://is1-ssl.mzstatic.com/image/thumb/Music123/v4/c7/3b/97/c73b9789-ef66-6b5f-4892-7e55752acf81/859755855188_cover.jpg/1200x1200bb.jpg",
+        "width": 1200,
+        "height": 1200,
+        "matchName": "#STDRUMS",
+        "notes": "album art: \"Business in Shibuya for Subsc (Live)\"",
+        "source": "itunes",
+        "nameScore": 0.85,
+        "finalScore": 0.525,
+        "crossVal": true
+      }
+    ],
+    "errors": []
+  },
+  {
+    "slug": "adipocere-necrophilia",
+    "name_en": "ADIPOCERE NECROPHILIA",
+    "name_ja": null,
+    "verdict": "miss",
+    "winner": null,
+    "updates": {},
+    "candidates": [],
+    "errors": []
+  },
+  {
+    "slug": "aile-the-shota",
+    "name_en": "Aile The Shota",
+    "name_ja": null,
+    "verdict": "hit",
+    "winner": {
+      "sourceId": "155790462",
+      "sourceUrl": "https://www.deezer.com/artist/155790462",
+      "imageUrl": "https://cdn-images.dzcdn.net/images/artist/c247aba79fb6cd5188a8fb6d7395e21a/1000x1000-000000-80-0-0.jpg",
+      "width": 1000,
+      "height": 1000,
+      "matchName": "Aile The Shota",
+      "source": "deezer",
+      "nameScore": 1,
+      "finalScore": 1,
+      "crossVal": true
+    },
+    "updates": {
+      "website_url": "https://ailetheshota.tokyo/"
+    },
+    "candidates": [
+      {
+        "sourceId": "155790462",
+        "sourceUrl": "https://www.deezer.com/artist/155790462",
+        "imageUrl": "https://cdn-images.dzcdn.net/images/artist/c247aba79fb6cd5188a8fb6d7395e21a/1000x1000-000000-80-0-0.jpg",
+        "width": 1000,
+        "height": 1000,
+        "matchName": "Aile The Shota",
+        "source": "deezer",
+        "nameScore": 1,
+        "finalScore": 1,
+        "crossVal": true
+      },
+      {
+        "sourceId": "10935074",
+        "sourceUrl": "https://www.discogs.com/artist/10935074",
+        "imageUrl": "https://i.discogs.com/y-CkzI3eDT0xZGq3KqJfwbGUT1f4Yb9PogJ9wCA3C7o/rs:fit/g:sm/q:90/h:612/w:600/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9BLTEwOTM1/MDc0LTE3NjI4MDUw/MzktNjE5MS5wbmc.jpeg",
+        "width": 600,
+        "height": 612,
+        "matchName": "Aile The Shota",
+        "websiteUrl": "https://ailetheshota.tokyo/",
+        "source": "discogs",
+        "nameScore": 1,
+        "finalScore": 1,
+        "crossVal": true
+      },
+      {
+        "sourceId": "345701791",
+        "sourceUrl": "https://www.deezer.com/artist/345701791",
+        "imageUrl": "https://cdn-images.dzcdn.net/images/artist//1000x1000-000000-80-0-0.jpg",
+        "width": 1000,
+        "height": 1000,
+        "matchName": "XinU/Aile The Shota",
+        "source": "deezer",
+        "nameScore": 0.85,
+        "finalScore": 0.8075,
+        "crossVal": false
+      }
+    ],
+    "errors": []
+  },
+  {
+    "slug": "aim-for-one",
+    "name_en": "Aim for One",
+    "name_ja": null,
+    "verdict": "hit",
+    "winner": {
+      "sourceId": "274821831",
+      "sourceUrl": "https://www.deezer.com/artist/274821831",
+      "imageUrl": "https://cdn-images.dzcdn.net/images/artist//1000x1000-000000-80-0-0.jpg",
+      "width": 1000,
+      "height": 1000,
+      "matchName": "Aim for One",
+      "source": "deezer",
+      "nameScore": 1,
+      "finalScore": 1,
+      "crossVal": true
+    },
+    "updates": {},
+    "candidates": [
+      {
+        "sourceId": "274821831",
+        "sourceUrl": "https://www.deezer.com/artist/274821831",
+        "imageUrl": "https://cdn-images.dzcdn.net/images/artist//1000x1000-000000-80-0-0.jpg",
+        "width": 1000,
+        "height": 1000,
+        "matchName": "Aim for One",
+        "source": "deezer",
+        "nameScore": 1,
+        "finalScore": 1,
+        "crossVal": true
+      },
+      {
+        "sourceId": "9635292",
+        "sourceUrl": "https://www.deezer.com/artist/9635292",
+        "imageUrl": "https://cdn-images.dzcdn.net/images/artist/c73b24f9f98bc371eb114118471ad03f/1000x1000-000000-80-0-0.jpg",
+        "width": 1000,
+        "height": 1000,
+        "matchName": "Air Fork One",
+        "source": "deezer",
+        "nameScore": 0.6666666666666667,
+        "finalScore": 0.6333333333333334,
+        "crossVal": false
+      },
+      {
+        "sourceId": "409647",
+        "sourceUrl": "https://www.deezer.com/artist/409647",
+        "imageUrl": "https://cdn-images.dzcdn.net/images/artist/cfb7695115eceac0f6fedc3c65820f8e/1000x1000-000000-80-0-0.jpg",
+        "width": 1000,
+        "height": 1000,
+        "matchName": "All for One",
+        "source": "deezer",
+        "nameScore": 0.6545454545454545,
+        "finalScore": 0.6218181818181818,
+        "crossVal": false
+      },
+      {
+        "sourceId": "1759088313",
+        "sourceUrl": "https://music.apple.com/jp/album/one-shot-single/1781831332?uo=4",
+        "imageUrl": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/1d/b9/57/1db95780-7118-25d1-81de-f8a6bb658e67/4571640490828_cover.jpg/1200x1200bb.jpg",
+        "width": 1200,
+        "height": 1200,
+        "matchName": "Aim for One",
+        "notes": "album art: \"One Shot - Single\"",
+        "source": "itunes",
+        "nameScore": 1,
+        "finalScore": 0.6,
+        "crossVal": true
+      }
+    ],
+    "errors": []
+  },
+  {
+    "slug": "all-jack",
+    "name_en": "All Jack",
+    "name_ja": null,
+    "verdict": "hit",
+    "winner": {
+      "sourceId": "339152731",
+      "sourceUrl": "https://www.deezer.com/artist/339152731",
+      "imageUrl": "https://cdn-images.dzcdn.net/images/artist//1000x1000-000000-80-0-0.jpg",
+      "width": 1000,
+      "height": 1000,
+      "matchName": "All Jack",
+      "source": "deezer",
+      "nameScore": 1,
+      "finalScore": 1,
+      "crossVal": true
+    },
+    "updates": {},
+    "candidates": [
+      {
+        "sourceId": "339152731",
+        "sourceUrl": "https://www.deezer.com/artist/339152731",
+        "imageUrl": "https://cdn-images.dzcdn.net/images/artist//1000x1000-000000-80-0-0.jpg",
+        "width": 1000,
+        "height": 1000,
+        "matchName": "All Jack",
+        "source": "deezer",
+        "nameScore": 1,
+        "finalScore": 1,
+        "crossVal": true
+      },
+      {
+        "sourceId": "1830651142",
+        "sourceUrl": "https://music.apple.com/jp/album/all-jack-single/1830651140?uo=4",
+        "imageUrl": "https://is1-ssl.mzstatic.com/image/thumb/Music221/v4/7c/7c/8c/7c7c8cce-fec4-1819-0a94-56ca588f72a7/4550711313693_cover.png/1200x1200bb.jpg",
+        "width": 1200,
+        "height": 1200,
+        "matchName": "All Jack",
+        "notes": "album art: \"All Jack - Single\"",
+        "source": "itunes",
+        "nameScore": 1,
+        "finalScore": 0.6,
+        "crossVal": true
+      },
+      {
+        "sourceId": "983706",
+        "sourceUrl": "https://www.deezer.com/artist/983706",
+        "imageUrl": "https://cdn-images.dzcdn.net/images/artist/283218a6f88b7f2eccfba9e30d2afe65/1000x1000-000000-80-0-0.jpg",
+        "width": 1000,
+        "height": 1000,
+        "matchName": "All Black",
+        "source": "deezer",
+        "nameScore": 0.6222222222222222,
+        "finalScore": 0.5911111111111111,
+        "crossVal": false
+      },
+      {
+        "sourceId": "12738039",
+        "sourceUrl": "https://www.deezer.com/artist/12738039",
+        "imageUrl": "https://cdn-images.dzcdn.net/images/artist/b04143f7fae5e385b94214cd4c0638a2/1000x1000-000000-80-0-0.jpg",
+        "width": 1000,
+        "height": 1000,
+        "matchName": "AllBlack",
+        "source": "deezer",
+        "nameScore": 0.6000000000000001,
+        "finalScore": 0.5700000000000001,
+        "crossVal": false
+      }
+    ],
+    "errors": []
+  },
+  {
+    "slug": "amidagaran",
+    "name_en": "AMIDAGARAN",
+    "name_ja": null,
+    "verdict": "miss",
+    "winner": null,
+    "updates": {},
+    "candidates": [],
+    "errors": []
+  },
+  {
+    "slug": "b",
+    "name_en": "B・佐藤慎之介",
+    "name_ja": null,
+    "verdict": "miss",
+    "winner": null,
+    "updates": {},
+    "candidates": [],
+    "errors": []
+  },
+  {
+    "slug": "blondnewhalf",
+    "name_en": "BLONDnewHALF",
+    "name_ja": null,
+    "verdict": "miss",
+    "winner": null,
+    "updates": {},
+    "candidates": [],
+    "errors": []
+  },
+  {
+    "slug": "bogulta",
+    "name_en": "BOGULTA",
+    "name_ja": null,
+    "verdict": "miss",
+    "winner": null,
+    "updates": {},
+    "candidates": [
+      {
+        "sourceId": "7194574",
+        "sourceUrl": "https://www.deezer.com/artist/7194574",
+        "imageUrl": "https://cdn-images.dzcdn.net/images/artist/9fc98af5e764493cd4009c9c7bc69cb7/1000x1000-000000-80-0-0.jpg",
+        "width": 1000,
+        "height": 1000,
+        "matchName": "Baulta",
+        "source": "deezer",
+        "nameScore": 0.5714285714285715,
+        "finalScore": 0.5428571428571429,
+        "crossVal": false
+      },
+      {
+        "sourceId": "91478752",
+        "sourceUrl": "https://www.deezer.com/artist/91478752",
+        "imageUrl": "https://cdn-images.dzcdn.net/images/artist/6f8036cb601cd81a2f116d6f4e3785fc/1000x1000-000000-80-0-0.jpg",
+        "width": 1000,
+        "height": 1000,
+        "matchName": "bokula.",
+        "source": "deezer",
+        "nameScore": 0.5714285714285715,
+        "finalScore": 0.5428571428571429,
+        "crossVal": false
+      },
+      {
+        "sourceId": "91638482",
+        "sourceUrl": "https://www.deezer.com/artist/91638482",
+        "imageUrl": "https://cdn-images.dzcdn.net/images/artist/fc225cffab78db65723ad26dae880f92/1000x1000-000000-80-0-0.jpg",
+        "width": 1000,
+        "height": 1000,
+        "matchName": "Boruta",
+        "source": "deezer",
+        "nameScore": 0.5714285714285715,
+        "finalScore": 0.5428571428571429,
+        "crossVal": false
+      },
+      {
+        "sourceId": "245097862",
+        "sourceUrl": "https://www.deezer.com/artist/245097862",
+        "imageUrl": "https://cdn-images.dzcdn.net/images/artist/1be9cdc10cd0f4e530e5f1f836726d05/1000x1000-000000-80-0-0.jpg",
+        "width": 1000,
+        "height": 1000,
+        "matchName": "BOUTA",
+        "source": "deezer",
+        "nameScore": 0.5714285714285715,
+        "finalScore": 0.5428571428571429,
+        "crossVal": false
+      },
+      {
+        "sourceId": "271275952",
+        "sourceUrl": "https://www.deezer.com/artist/271275952",
+        "imageUrl": "https://cdn-images.dzcdn.net/images/artist/0b9687dc3f62bfd0b97c7278209aace3/1000x1000-000000-80-0-0.jpg",
+        "width": 1000,
+        "height": 1000,
+        "matchName": "BOOGUTA",
+        "source": "deezer",
+        "nameScore": 0.5714285714285715,
+        "finalScore": 0.5428571428571429,
+        "crossVal": false
+      }
+    ],
+    "errors": []
+  },
+  {
+    "slug": "bonnounomukuro",
+    "name_en": "Bonnounomukuro + マリヲ",
+    "name_ja": null,
+    "verdict": "miss",
+    "winner": null,
+    "updates": {},
+    "candidates": [],
+    "errors": []
+  }
+]

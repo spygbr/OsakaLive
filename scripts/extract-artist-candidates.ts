@@ -2,8 +2,9 @@
  * scripts/extract-artist-candidates.ts
  *
  * Phase 1 of the artist extraction pipeline.
- * Extracts artist name candidates from events.title_en and events.description_en
- * and populates the artist_candidates staging table.
+ * Extracts artist name candidates from events.title_raw, event_sources.lineup,
+ * and events.description, and populates the pre-aggregated artist_candidates
+ * staging table (one row per distinct name_norm).
  *
  * Usage:
  *   npx tsx scripts/extract-artist-candidates.ts [--dry-run]
@@ -695,52 +696,95 @@ async function main() {
     return
   }
 
-  // ── 7. Write to DB ─────────────────────────────────────────────────────────
+  // ── 7. Aggregate to one row per distinct name_norm ────────────────────────
+  //
+  // The staging table is pre-aggregated: UNIQUE (name_norm), no event FK,
+  // one row per artist candidate with event_count. Collapse the per-event
+  // finalRows here into per-name records. Non-discard rows only.
+  const CONF_ORDER: Record<Confidence, number> = { high: 0, medium: 1, low: 2, discard: 3 }
+  const bestConfBetween = (a: Confidence, b: Confidence): Confidence =>
+    CONF_ORDER[a] < CONF_ORDER[b] ? a : b
+
+  interface AggRow {
+    name_norm:    string
+    name_display: string
+    event_count:  number
+    confidence:   'high' | 'medium' | 'low'
+  }
+  const byName = new Map<string, AggRow>()
+
+  for (const r of finalRows) {
+    if (r.confidence === 'discard') continue
+    const key = r.raw_name.toLowerCase().replace(/\s+/g, ' ').trim()
+    const eventCount = nameEventSets.get(key)?.size ?? 1
+    const existing = byName.get(key)
+    if (!existing) {
+      byName.set(key, {
+        name_norm:    key,
+        name_display: r.raw_name,
+        event_count:  eventCount,
+        confidence:   r.confidence,
+      })
+    } else {
+      // Keep best confidence; bump event_count if the per-name counter grew
+      existing.confidence  = bestConfBetween(existing.confidence, r.confidence) as 'high' | 'medium' | 'low'
+      existing.event_count = Math.max(existing.event_count, eventCount)
+      // Prefer the non-all-lowercase display form if current one is all lowercase
+      if (existing.name_display === existing.name_display.toLowerCase() && r.raw_name !== r.raw_name.toLowerCase()) {
+        existing.name_display = r.raw_name
+      }
+    }
+  }
+
+  const aggRows = Array.from(byName.values())
+  console.log(`\n🧮  Aggregated: ${aggRows.length} distinct candidates (from ${finalRows.length} raw rows)`)
+
+  // ── 8. Write to DB ─────────────────────────────────────────────────────────
   console.log('\n💾  Clearing unreviewed candidates...')
 
-  // Safe re-run: only remove rows that haven't been LLM-reviewed or promoted yet
+  // Safe re-run: only remove rows that haven't been reviewed or merged yet.
+  // Approved/rejected/merged rows are preserved so human curation survives.
   const { error: deleteError } = await supabase
     .from('artist_candidates')
     .delete()
-    .eq('llm_reviewed', false)
-    .eq('promoted', false)
+    .eq('status', 'pending')
+    .is('merged_into_artist_id', null)
 
   if (deleteError) {
     console.error('❌  Failed to clear existing candidates:', deleteError.message)
     process.exit(1)
   }
 
-  console.log('💾  Inserting candidates...')
+  console.log('💾  Upserting candidates...')
   const CHUNK_SIZE = 500
   let   inserted  = 0
 
-  for (let i = 0; i < finalRows.length; i += CHUNK_SIZE) {
-    const chunk = finalRows.slice(i, i + CHUNK_SIZE)
+  for (let i = 0; i < aggRows.length; i += CHUNK_SIZE) {
+    const chunk = aggRows.slice(i, i + CHUNK_SIZE)
 
-    const { error: insertError } = await supabase
+    const { error: upsertError } = await supabase
       .from('artist_candidates')
-      .insert(
+      .upsert(
         chunk.map(r => ({
-          raw_name:          r.raw_name,
-          source:            r.source,
-          confidence:        r.confidence,
-          confidence_reason: r.confidence_reason,
-          event_id:          r.event_id,
-          llm_reviewed:      false,
-          promoted:          false,
+          name_norm:    r.name_norm,
+          name_display: r.name_display,
+          event_count:  r.event_count,
+          confidence:   r.confidence,
+          last_seen_at: new Date().toISOString(),
         })),
+        { onConflict: 'name_norm', ignoreDuplicates: false },
       )
 
-    if (insertError) {
-      console.error(`❌  Insert failed at chunk ${i / CHUNK_SIZE + 1}:`, insertError.message)
+    if (upsertError) {
+      console.error(`❌  Upsert failed at chunk ${i / CHUNK_SIZE + 1}:`, upsertError.message)
       process.exit(1)
     }
 
     inserted += chunk.length
-    process.stdout.write(`\r    ${inserted} / ${finalRows.length} rows...`)
+    process.stdout.write(`\r    ${inserted} / ${aggRows.length} rows...`)
   }
 
-  console.log(`\n\n✅  Done — ${finalRows.length} rows written to artist_candidates.\n`)
+  console.log(`\n\n✅  Done — ${aggRows.length} aggregated rows written to artist_candidates.\n`)
 
   // ── 8. Post-run summary ────────────────────────────────────────────────────
   console.log('📋  Top high-confidence candidates:\n')
@@ -763,11 +807,15 @@ async function main() {
     )
 
   console.log('\n🔍  Review the staging table:\n')
-  console.log('    SELECT * FROM artist_candidate_summary LIMIT 50;\n')
+  console.log('    SELECT name_display, confidence, event_count, status, llm_verdict')
+  console.log('    FROM artist_candidates')
+  console.log('    ORDER BY event_count DESC')
+  console.log('    LIMIT 50;\n')
   console.log('    -- Ready to promote (high conf or LLM-confirmed):')
-  console.log('    SELECT raw_name, confidence, llm_verdict, event_count')
-  console.log('    FROM artist_candidate_summary')
-  console.log('    WHERE confidence = \'high\' AND NOT already_promoted')
+  console.log('    SELECT name_display, confidence, llm_verdict, event_count')
+  console.log('    FROM artist_candidates')
+  console.log("    WHERE merged_into_artist_id IS NULL")
+  console.log("      AND (status = 'approved' OR confidence = 'high')")
   console.log('    ORDER BY event_count DESC;\n')
 }
 

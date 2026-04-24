@@ -16,7 +16,15 @@
  *   --dry-run  Preview what would be inserted/updated without touching the DB
  *
  * Promotes candidates WHERE:
- *   (confidence = 'high' OR llm_verdict = 'artist') AND promoted = false
+ *   status = 'approved' AND merged_into_artist_id IS NULL
+ *
+ * artist_candidates is a pre-aggregated table (one row per distinct normalised
+ * name, no FK to events). For each promoted candidate, event_artists rows are
+ * created by ILIKE-matching the candidate name against events.title_raw and
+ * events.description (title match → billing_order 1, description match → 2).
+ *
+ * After promotion, the candidate row is marked:
+ *   status = 'merged', merged_into_artist_id = <new artist id>
  *
  * Requires .env.local:
  *   NEXT_PUBLIC_SUPABASE_URL=...
@@ -58,11 +66,12 @@ const supabase = createClient<any>(SUPABASE_URL, SERVICE_KEY, { auth: { persistS
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 interface CandidateRow {
-  id:         string
-  raw_name:   string
-  source:     'title' | 'description'
-  confidence: string
-  event_id:   string
+  id:           string
+  name_display: string
+  name_norm:    string
+  confidence:   string
+  event_count:  number | null
+  llm_verdict:  string | null
 }
 
 interface ArtistRow {
@@ -124,21 +133,28 @@ function uniqueSlug(name: string, existingSlugs: Set<string>): string {
 async function main() {
   console.log(`\n🚀  Artist promoter${DRY_RUN ? '  [DRY RUN]' : ''}\n`)
 
-  // ── 1. Load unpromoted approved candidates ────────────────────────────────
+  // ── 1. Load unmerged candidates, then filter in JS ────────────────────────
   //
-  // We need all individual rows (not distinct names yet) so we have the
-  // event_id → raw_name → source mapping for event_artists.
-  const { data: candidates, error: candError } = await supabase
+  // artist_candidates is pre-aggregated — one row per distinct name_norm.
+  // Promote criteria:
+  //   merged_into_artist_id IS NULL  (not already promoted)
+  //   AND llm_verdict IS NULL OR llm_verdict != 'not_artist'
+  //   AND (status = 'approved' OR confidence = 'high')
+  const { data: allRows, error: candError } = await supabase
     .from('artist_candidates')
-    .select('id, raw_name, source, confidence, event_id')
-    .eq('promoted', false)
-    .or('confidence.eq.high,llm_verdict.eq.artist')
-    .neq('llm_verdict', 'not_artist')   // honour manual rejections even on high-confidence rows
+    .select('id, name_display, name_norm, confidence, event_count, llm_verdict, status')
+    .is('merged_into_artist_id', null)
+    .in('status', ['pending', 'approved'])
 
-  if (candError || !candidates) {
+  if (candError || !allRows) {
     console.error('❌  Failed to load candidates:', candError?.message)
     process.exit(1)
   }
+
+  const candidates = (allRows as Array<CandidateRow & { status: string }>).filter(c => {
+    if (c.llm_verdict === 'not_artist') return false
+    return c.status === 'approved' || c.confidence === 'high'
+  })
 
   if (candidates.length === 0) {
     console.log('✅  No unpromoted approved candidates found — nothing to do.\n')
@@ -147,18 +163,13 @@ async function main() {
 
   console.log(`📋  ${candidates.length} candidate rows ready for promotion\n`)
 
-  // ── 2. Group by normalised name ───────────────────────────────────────────
-  //
-  // Key: lowercase raw_name (for matching)
-  // Value: { displayName (most common casing), rows[] }
-  const nameMap = new Map<string, { displayName: string; rows: CandidateRow[] }>()
-
+  // Each candidate row IS already one-per-name; still key by name_norm for
+  // collision safety if duplicates ever slip through.
+  const nameMap = new Map<string, { displayName: string; row: CandidateRow }>()
   for (const c of candidates as CandidateRow[]) {
-    const key = c.raw_name.toLowerCase().trim()
-    if (!nameMap.has(key)) {
-      nameMap.set(key, { displayName: c.raw_name, rows: [] })
+    if (!nameMap.has(c.name_norm)) {
+      nameMap.set(c.name_norm, { displayName: c.name_display, row: c })
     }
-    nameMap.get(key)!.rows.push(c)
   }
 
   console.log(`🎤  ${nameMap.size} distinct artist names to process\n`)
@@ -192,7 +203,7 @@ async function main() {
 
   const dryRunLog: string[] = []
 
-  for (const [nameKey, { displayName, rows }] of nameMap) {
+  for (const [nameKey, { displayName, row }] of nameMap) {
     // ── 4a. Resolve artist_id ──────────────────────────────────────────────
 
     let artistId: string
@@ -243,29 +254,39 @@ async function main() {
       }
     }
 
-    if (DRY_RUN) {
-      // Show which events would be linked
-      const uniqueEventIds = [...new Set(rows.map(r => r.event_id))]
-      dryRunLog.push(
-        `           └─ ${uniqueEventIds.length} event_artist link(s) would be created` +
-        (rows.some(r => r.source === 'title') ? ' (billing_order 1 for title)' : ''),
-      )
-      linksCreated    += uniqueEventIds.length
-      candidatesMarked += rows.length
-      continue
-    }
-
-    // ── 4b. Insert event_artists links ─────────────────────────────────────
-
-    // Build unique (event_id, billing_order) pairs. Title source = order 1, description = 2.
-    // If the same event has both title and description candidates for this artist,
-    // prefer billing_order 1 (title).
+    // ── 4b. Find matching events via ILIKE on title_raw / description ──────
+    //
+    // artist_candidates has no direct event FK, so recover the mapping by
+    // string-matching the name against events.title_raw (billing_order 1)
+    // or events.description (billing_order 2). Event listings in Osaka go
+    // back a few months; cap the window to keep matches relevant.
+    //
+    // Very short names (<3 chars) would match too much noise — skip.
     const eventBillingMap = new Map<string, number>()
-    for (const row of rows) {
-      const order = row.source === 'title' ? 1 : 2
-      const existing = eventBillingMap.get(row.event_id)
-      if (existing === undefined || order < existing) {
-        eventBillingMap.set(row.event_id, order)
+
+    if (displayName.length >= 3) {
+      const needle = displayName.replace(/[\\%_]/g, (m) => `\\${m}`)
+
+      // Title matches get billing_order 1
+      const { data: titleHits, error: titleErr } = await supabase
+        .from('events')
+        .select('id')
+        .ilike('title_raw', `%${needle}%`)
+        .limit(200)
+      if (titleErr) console.warn(`  ⚠  events title lookup for "${displayName}": ${titleErr.message}`)
+      for (const ev of (titleHits ?? []) as Array<{ id: string }>) {
+        eventBillingMap.set(ev.id, 1)
+      }
+
+      // Description matches get billing_order 2 (don't overwrite a title hit)
+      const { data: descHits, error: descErr } = await supabase
+        .from('events')
+        .select('id')
+        .ilike('description', `%${needle}%`)
+        .limit(200)
+      if (descErr) console.warn(`  ⚠  events desc lookup for "${displayName}": ${descErr.message}`)
+      for (const ev of (descHits ?? []) as Array<{ id: string }>) {
+        if (!eventBillingMap.has(ev.id)) eventBillingMap.set(ev.id, 2)
       }
     }
 
@@ -275,34 +296,39 @@ async function main() {
       billing_order,
     }))
 
+    if (DRY_RUN) {
+      dryRunLog.push(
+        `           └─ ${linkRows.length} event_artist link(s) would be created` +
+        (linkRows.some(r => r.billing_order === 1) ? ' (some billing_order 1)' : ''),
+      )
+      linksCreated    += linkRows.length
+      candidatesMarked += 1
+      continue
+    }
+
     if (linkRows.length > 0) {
-      // Supabase doesn't support ON CONFLICT DO NOTHING directly in the JS client,
-      // but the underlying PostgREST upsert with ignoreDuplicates achieves the same.
       const { error: linkError } = await supabase
         .from('event_artists')
         .upsert(linkRows, { onConflict: 'event_id,artist_id', ignoreDuplicates: true })
 
       if (linkError) {
         console.error(`  ❌  Failed to insert event_artists for "${displayName}": ${linkError.message}`)
-        // Don't skip — still mark candidates so we don't retry on next run
       } else {
         linksCreated += linkRows.length
       }
     }
 
-    // ── 4c. Mark candidates as promoted ────────────────────────────────────
-
-    const candidateIds = rows.map(r => r.id)
+    // ── 4c. Mark candidate as merged ───────────────────────────────────────
 
     const { error: updateError } = await supabase
       .from('artist_candidates')
-      .update({ promoted: true, artist_id: artistId })
-      .in('id', candidateIds)
+      .update({ status: 'merged', merged_into_artist_id: artistId })
+      .eq('id', row.id)
 
     if (updateError) {
-      console.error(`  ❌  Failed to mark candidates promoted for "${displayName}": ${updateError.message}`)
+      console.error(`  ❌  Failed to mark candidate merged for "${displayName}": ${updateError.message}`)
     } else {
-      candidatesMarked += candidateIds.length
+      candidatesMarked += 1
     }
 
     const action = isNew ? '✨ created' : '♻️  reused'
@@ -344,7 +370,7 @@ async function main() {
   const { count: promotedCount } = await supabase
     .from('artist_candidates')
     .select('*', { count: 'exact', head: true })
-    .eq('promoted', true)
+    .eq('status', 'merged')
 
   console.log(`    artists table total  : ${artistCount}`)
   console.log(`    event_artists total  : ${eventArtistCount}`)
@@ -366,7 +392,7 @@ async function main() {
 
   console.log('\n✅  Done.\n')
   console.log('💡  Next steps:')
-  console.log('    1. Run: npx tsx scripts/scrape-artist-images.ts')
+  console.log('    1. Run: npx tsx scripts/enrich-artists.ts  (socials + image)')
   console.log('    2. Manually fix any artist-XXXXXXXX slugs listed above')
   console.log('    3. Fill in name_ja for Japanese-named artists as needed\n')
 }

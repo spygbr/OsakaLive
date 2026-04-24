@@ -129,39 +129,38 @@ npx tsx scripts/promote-artists.ts --dry-run
 
 ---
 
-### Step 5 — Social link enrichment
+### Step 5 — Enrichment (image + genre + website + instagram)
 
-**Script:** `scripts/enrich-artist-socials.ts`
+**Script:** `scripts/enrich-artists.ts`
 
-For newly promoted artists with no `instagram_url` or `website_url`, asks Claude Haiku if it knows their official links. Validates each URL with a real HTTP request before writing to the DB. Only updates columns that are currently null.
-
-```bash
-npx tsx scripts/enrich-artist-socials.ts               # artists missing BOTH social links
-npx tsx scripts/enrich-artist-socials.ts --all          # any artist missing an image
-npx tsx scripts/enrich-artist-socials.ts --limit 20
-npx tsx scripts/enrich-artist-socials.ts --dry-run
-```
-
-**Frequency:** After each promote cycle. Safe to re-run periodically.
-
----
-
-### Step 6 — Image scraping
-
-**Script:** `scripts/scrape-artist-images.ts`
-
-For all artists with `image_url = null`, fetches the `og:image` from their Instagram or website, uploads to the `artist-images` Supabase Storage bucket, and writes the CDN URL back to `artists.image_url`. Tries Instagram first, falls back to website.
+Single-pass enrichment for all artists missing `image_url`. Runs music-database
+providers (Deezer, Bandcamp, Wikipedia, TheAudioDB, Discogs, Wikidata,
+MusicBrainz, iTunes, unavatar, Spotify) in parallel per artist, scores
+candidates, uploads the winner to Supabase Storage, and in the same UPDATE
+also writes `website_url` (from TheAudioDB/Discogs), `genre_id` (from
+Spotify/TheAudioDB genre tags), and `instagram_url` (Claude Haiku fallback,
+only when APIs don't provide a website and instagram is unknown).
 
 ```bash
-npx tsx scripts/scrape-artist-images.ts
+npx tsx scripts/enrich-artists.ts               # full run — all missing images
+npx tsx scripts/enrich-artists.ts --dry-run     # preview without writes
+npx tsx scripts/enrich-artists.ts --limit 20
+npx tsx scripts/enrich-artists.ts --slugs boris,merzbow
+npx tsx scripts/enrich-artists.ts --skip-llm   # skip instagram fallback
+npx tsx scripts/enrich-artists.ts --skip-image # only genres + socials
+npx tsx scripts/enrich-artists.ts --force      # re-enrich artists with existing image_url
+npx tsx scripts/enrich-artists.ts --sources deezer,spotify,wikipedia
+npx tsx scripts/enrich-artists.ts --threshold 0.65
 ```
 
-> **Note:** Instagram increasingly serves a login wall. Artists with no social links or login-walled profiles need images uploaded manually to the `artist-images` bucket, then:
-> ```sql
-> UPDATE artists SET image_url = '<CDN_URL>' WHERE slug = '<slug>';
-> ```
+After each run, `tmp/enrich-artists/report.json` and `miss-list.csv` are written.
+Fill `override_image_url` in the CSV for misses, then apply:
 
-**Frequency:** After each enrich cycle (Step 5). Safe to re-run at any time.
+```bash
+npx tsx scripts/apply-manual-image-overrides.ts
+```
+
+**Frequency:** After each promote cycle. Safe to re-run at any time.
 
 ---
 
@@ -188,8 +187,9 @@ No dry-run flag — review the console output carefully. Run whenever dirty name
 2. review-artist-candidates.ts    LLM classification
 3. [Human review in Supabase]     approve / reject candidates
 4. promote-artists.ts             push to live artists table
-5. enrich-artist-socials.ts       find Instagram / website URLs
-6. scrape-artist-images.ts        fetch and store profile photos
+5. enrich-artists.ts              image + genre + website + instagram (single pass)
 ```
 
-Steps 5 and 6 can be re-run independently at any time without re-running the full pipeline.
+Step 5 can be re-run independently at any time without re-running the full pipeline.
+
+**Archive:** superseded PoC scripts are in `scripts/archive/` for reference.

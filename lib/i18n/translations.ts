@@ -7,6 +7,7 @@ export const translations = {
   nav_venues:    { en: 'VENUES',    ja: '会場' },
   nav_artists:   { en: 'ARTISTS',   ja: 'アーティスト' },
   nav_tickets:   { en: 'TICKETS',   ja: 'チケット' },
+  nav_guide:     { en: 'GUIDE',     ja: 'ガイド' },
   nav_lang:      { en: 'JP',        ja: 'EN' },
   nav_filterBtn: { en: 'FILTER / 検索', ja: 'フィルター / 検索' },
 

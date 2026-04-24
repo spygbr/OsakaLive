@@ -100,12 +100,13 @@ interface VenueRow {
 
 interface Candidate {
   id:             string
-  raw_name:       string
-  source:         'title' | 'description'
+  name_display:   string
+  name_norm:      string
   confidence:     string
-  event_id:       string
-  title_raw:   string | null
-  description: string | null
+  event_count:    number | null
+  // Context pulled from events table via ILIKE against name_display
+  sample_title:       string | null
+  sample_description: string | null
 }
 
 interface ClassificationResult {
@@ -201,8 +202,8 @@ function checkAgainstVenues(
 // ── Prompt construction ────────────────────────────────────────────────────────
 
 function buildPrompt(c: Candidate, venueList: string[]): string {
-  const title = (c.title_raw ?? '').slice(0, 120)
-  const desc  = (c.description ?? '').slice(0, 300)
+  const title = (c.sample_title ?? '').slice(0, 120)
+  const desc  = (c.sample_description ?? '').slice(0, 300)
   const venues = venueList.join(', ')
 
   return `You are classifying strings extracted from Japanese live music event listings in Osaka.
@@ -220,9 +221,10 @@ ${venues}
 If the string matches or closely resembles any of the above venue names, or is clearly a
 venue abbreviation or nickname (e.g. "Bears" for "Namba BEARS"), classify as "not_artist".
 
-String: "${c.raw_name}"
+String: "${c.name_display}"
 Event title it appeared in: "${title}"
 Event description: "${desc}"
+Times seen across events: ${c.event_count ?? 1}
 
 Respond with JSON only: {"verdict": "artist"|"not_artist"|"uncertain", "reason": "one concise sentence"}`
 }
@@ -279,6 +281,18 @@ async function classifyWithClaude(
 
 // ── DB helpers ─────────────────────────────────────────────────────────────────
 
+/**
+ * Maps an LLM verdict to the artist_candidates.status value.
+ *   artist      → approved   (will be promoted to artists table later)
+ *   not_artist  → rejected
+ *   uncertain   → pending    (keep for manual review; store verdict + reason)
+ */
+function verdictToStatus(v: LlmVerdict): 'approved' | 'rejected' | 'pending' {
+  if (v === 'artist')     return 'approved'
+  if (v === 'not_artist') return 'rejected'
+  return 'pending'
+}
+
 async function markReviewed(results: ClassificationResult[]): Promise<void> {
   const CHUNK = 100
   for (let i = 0; i < results.length; i += CHUNK) {
@@ -287,7 +301,11 @@ async function markReviewed(results: ClassificationResult[]): Promise<void> {
       chunk.map(r =>
         supabase
           .from('artist_candidates')
-          .update({ llm_reviewed: true, llm_verdict: r.verdict })
+          .update({
+            llm_verdict: r.verdict,
+            llm_reason:  r.reason,
+            status:      verdictToStatus(r.verdict),
+          })
           .eq('id', r.id)
           .then(({ error }: { error: { message: string } | null }) => {
             if (error) throw new Error(`Update failed for ${r.id}: ${error.message}`)
@@ -338,21 +356,12 @@ async function main() {
 
   let query = supabase
     .from('artist_candidates')
-    .select(`
-      id,
-      raw_name,
-      source,
-      confidence,
-      event_id,
-      events (
-        title_raw,
-        description
-      )
-    `)
+    .select('id, name_display, name_norm, confidence, event_count')
     .in('confidence', confidenceLevels)
-    .eq('llm_reviewed', false)
+    .eq('status', 'pending')
     .order('confidence')
-    .order('raw_name')
+    .order('event_count', { ascending: false })
+    .order('name_display')
 
   if (LIMIT !== null && !isNaN(LIMIT)) {
     query = query.limit(LIMIT)
@@ -370,31 +379,54 @@ async function main() {
     return
   }
 
-  const candidates: Candidate[] = rawRows.map((row: Record<string, unknown>) => {
-    const ev = row.events as { title_raw?: string | null; description?: string | null } | null
-    return {
-      id:             row.id as string,
-      raw_name:       row.raw_name as string,
-      source:         row.source as 'title' | 'description',
-      confidence:     row.confidence as string,
-      event_id:       row.event_id as string,
-      title_raw:   ev?.title_raw ?? null,
-      description: ev?.description ?? null,
-    }
-  })
+  // Build candidates (no event context yet — fetched in next step)
+  const candidates: Candidate[] = rawRows.map((row: Record<string, unknown>) => ({
+    id:                 row.id as string,
+    name_display:       row.name_display as string,
+    name_norm:          row.name_norm as string,
+    confidence:         row.confidence as string,
+    event_count:        (row.event_count as number | null) ?? null,
+    sample_title:       null,
+    sample_description: null,
+  }))
 
   console.log(`📋  Candidates to review: ${candidates.length}`)
+
+  // ── 2b. Fetch one sample event per candidate for LLM context ───────────────
+  //
+  // artist_candidates is a pre-aggregated table with no FK to events, so we
+  // find context by ILIKE-matching the candidate name against events.title_raw.
+  // One event per candidate is enough — used only for prompt context.
+  process.stdout.write(`    Fetching event context (ILIKE lookup)...`)
+  let contextHits = 0
+  for (const c of candidates) {
+    // Skip very short names — ILIKE would match too much noise
+    if (c.name_display.length < 3) continue
+    // Escape ILIKE metacharacters to prevent query injection / false matches
+    const needle = c.name_display.replace(/[\\%_]/g, (m) => `\\${m}`)
+    const { data: evRows } = await supabase
+      .from('events')
+      .select('title_raw, description')
+      .ilike('title_raw', `%${needle}%`)
+      .limit(1)
+    if (evRows && evRows.length > 0) {
+      c.sample_title       = evRows[0].title_raw ?? null
+      c.sample_description = evRows[0].description ?? null
+      contextHits++
+    }
+  }
+  console.log(` done — ${contextHits}/${candidates.length} with event context.\n`)
 
   // ── 3. Venue pre-flight check ───────────────────────────────────────────────
   const venueRejected: ClassificationResult[] = []
   const needsLlm:      Candidate[]            = []
 
   for (const c of candidates) {
-    const venueMatch = checkAgainstVenues(c.raw_name, venueLookup)
+    const venueMatch = checkAgainstVenues(c.name_display, venueLookup)
     if (venueMatch) {
       venueRejected.push({ id: c.id, ...venueMatch, method: 'venue_check' })
       if (DRY_RUN) {
-        console.log(`  🏛️  [venue] "${c.raw_name}" → ${venueMatch.reason}`)
+        console.log(`  🏛️  [venue] "${c.name_display}" → ${venueMatch.reason}`)
       }
     } else {
       needsLlm.push(c)
@@ -407,7 +439,7 @@ async function main() {
     console.log('🔍  Sample LLM prompts (first 3 remaining candidates):\n')
     for (const c of needsLlm.slice(0, 3)) {
       console.log('─'.repeat(60))
-      console.log(`  [${c.confidence}] "${c.raw_name}"  (source: ${c.source})`)
+      console.log(`  [${c.confidence}] "${c.name_display}"  (events: ${c.event_count ?? '?'})`)
       console.log(buildPrompt(c, venueLookup.venueList))
       console.log()
     }
@@ -476,7 +508,7 @@ async function main() {
       console.log('\n🎤  Sample confirmed artists (first 20):\n')
       for (const r of artistResults.slice(0, 20)) {
         const c = needsLlm.find(c => c.id === r.id)!
-        console.log(`  [${c.confidence.padEnd(8)}] "${c.raw_name}"  — ${r.reason}`)
+        console.log(`  [${c.confidence.padEnd(8)}] "${c.name_display}"  — ${r.reason}`)
       }
       if (artistResults.length > 20) console.log(`  … and ${artistResults.length - 20} more`)
     }
@@ -486,17 +518,17 @@ async function main() {
       console.log('\n❓  Uncertain — needs manual review:\n')
       for (const r of uncertainResults.slice(0, 10)) {
         const c = needsLlm.find(c => c.id === r.id)!
-        console.log(`  "${c.raw_name}"  — ${r.reason}`)
+        console.log(`  "${c.name_display}"  — ${r.reason}`)
       }
       if (uncertainResults.length > 10) console.log(`  … and ${uncertainResults.length - 10} more`)
     }
   }
 
   console.log('\n🔍  Review the results:\n')
-  console.log("    SELECT raw_name, confidence, llm_verdict, event_count")
-  console.log("    FROM artist_candidate_summary")
-  console.log("    WHERE (confidence = 'high' OR llm_verdict = 'artist')")
-  console.log("      AND NOT already_promoted")
+  console.log("    SELECT name_display, confidence, llm_verdict, llm_reason, event_count")
+  console.log("    FROM artist_candidates")
+  console.log("    WHERE status = 'approved'")
+  console.log("      AND merged_into_artist_id IS NULL")
   console.log("    ORDER BY event_count DESC;\n")
 
   // Cost breakdown (no-op if no Haiku calls were made)
