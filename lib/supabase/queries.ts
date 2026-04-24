@@ -397,7 +397,7 @@ export async function getArtistBySlug(slug: string) {
   // Fetch upcoming events this artist is billed on
   const { data: eventArtistRows, error: evError } = await supabase
     .from('event_artists')
-    .select(`event:events(${EVENT_SELECT})`)
+    .select(`event:events(*, venue:venues(id, name_en, name_ja, slug, address_en, website_url, area:areas(name_en, name_ja, slug)))`)
     .eq('artist_id', artist.id)
   if (evError) console.error('[getArtistBySlug:events]', evError.message)
 
