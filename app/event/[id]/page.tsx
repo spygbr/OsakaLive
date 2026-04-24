@@ -375,9 +375,9 @@ export default async function EventDetailPage({
                         {t("event_venueWebsite")}
                       </a>
                     )}
-                    {venue.scrape_url && (
+                    {(event.source_url ?? venue.scrape_url) && (
                       <a
-                        href={venue.scrape_url}
+                        href={event.source_url ?? venue.scrape_url!}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex-1 border border-outline-variant py-2 font-headline font-bold text-[10px] uppercase tracking-widest hover:bg-surface-container hover:border-primary hover:text-primary transition-colors text-center flex items-center justify-center gap-1"
