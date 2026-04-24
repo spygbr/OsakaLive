@@ -35,6 +35,21 @@ function toISODate(year: string | undefined, month: string, day: string): string
   return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
 }
 
+/**
+ * Skip date matches more than 30 days in the past at parse time. Some venue
+ * pages (club-joule) keep past-event sections inline with current schedule —
+ * the parser would otherwise pair an old date with whatever nav/promo text
+ * follows ("Discover more", "VIP SYSTEM"), only to have the validator reject
+ * it as date_too_old. Cutting it here both speeds the parse and stops these
+ * non-events from polluting events_rejected.
+ */
+const STALE_DATE_CUTOFF_MS = 30 * 86400_000
+function isStaleDate(iso: string, now: number = Date.now()): boolean {
+  const t = Date.parse(iso + 'T00:00:00Z')
+  if (Number.isNaN(t)) return false
+  return t < now - STALE_DATE_CUTOFF_MS
+}
+
 function cleanTitle(s: string): string {
   return s
     .replace(/(?:(\d{4})[年\/\-\.])?(\d{1,2})[月\/\-\.](\d{1,2})[日]?/g, '')
@@ -101,6 +116,8 @@ export function parseVenueSchedule(html: string, sourceUrl: string): ParseResult
 
     const isoDate = toISODate(dateMatch[1], dateMatch[2], dateMatch[3])
     if (!isoDate) continue
+    // Drop stale dates before doing any title scanning — see isStaleDate().
+    if (isStaleDate(isoDate)) continue
 
     // ── Title scan (date line + 6 ahead) ────────────────────────────────
     let title = ''

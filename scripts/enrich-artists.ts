@@ -702,7 +702,7 @@ async function searchSpotify(artist: Artist): Promise<RawCandidate[]> {
         const hits = json.artists?.items ?? []
         if (!hits.length) process.stderr.write(`   [spotify] 0 results (q="${q}" market="${market || 'global'}")\n`)
         for (const a of hits) {
-          if (seen.has(a.id) || !a.images.length) continue
+          if (seen.has(a.id) || !a.images?.length) continue
           if (scoreName(artist, a.name) === 0) continue
           seen.add(a.id)
           foundInMarket = true
@@ -712,7 +712,7 @@ async function searchSpotify(artist: Artist): Promise<RawCandidate[]> {
             sourceUrl: `https://open.spotify.com/artist/${a.id}`,
             imageUrl:  img.url, width: img.width, height: img.height,
             matchName: a.name,
-            genreTags: a.genres.length ? a.genres : undefined,
+            genreTags: a.genres?.length ? a.genres : undefined,
             notes:     market ? `market=${market}` : 'market=global',
           })
         }

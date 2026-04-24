@@ -16,6 +16,7 @@ import { IceGrillsSource } from './icegrills'
 import { UDiscoverSource } from './udiscover'
 import { UnionwaySource } from './unionway'
 import { VenueScheduleSource } from './venue'
+import { ClubJouleSource } from './club-joule'
 
 /** id → constructor for hand-coded aggregator sources. */
 const AGGREGATOR_REGISTRY: Record<string, () => Source> = {
@@ -23,6 +24,19 @@ const AGGREGATOR_REGISTRY: Record<string, () => Source> = {
   icegrills: () => new IceGrillsSource(),
   udiscover: () => new UDiscoverSource(),
   unionway:  () => new UnionwaySource(),
+}
+
+/**
+ * id → constructor for venue sources that need custom parsing instead of the
+ * generic VenueScheduleSource. The DB row still drives baseUrl + venueId; the
+ * override just swaps the parser. Add a venue here when its HTML structure
+ * defeats parseVenueSchedule().
+ */
+const VENUE_OVERRIDES: Record<
+  string,
+  (args: { baseUrl: string; venueId: string }) => Source
+> = {
+  'venue:club-joule': (a) => new ClubJouleSource(a),
 }
 
 type SourceRowDb = {
@@ -55,12 +69,17 @@ export async function loadSources(supabase: SupabaseClient): Promise<Source[]> {
         console.warn(`[v2] venue source ${row.id} missing venue_id — skipping`)
         continue
       }
-      out.push(new VenueScheduleSource({
-        id: row.id,
-        displayName: row.display_name,
-        baseUrl: row.base_url,
-        venueId: row.venue_id,
-      }))
+      const override = VENUE_OVERRIDES[row.id]
+      if (override) {
+        out.push(override({ baseUrl: row.base_url, venueId: row.venue_id }))
+      } else {
+        out.push(new VenueScheduleSource({
+          id: row.id,
+          displayName: row.display_name,
+          baseUrl: row.base_url,
+          venueId: row.venue_id,
+        }))
+      }
     }
   }
   return out
