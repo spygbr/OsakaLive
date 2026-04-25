@@ -315,7 +315,12 @@ export async function runSource(
     type SourceRecord = { event_id: string; source_url: string | null; raw_payload: unknown }
     const sourceRecords: SourceRecord[] = []
     for (const { event, venueId } of resolved) {
-      const id = ids.get(`${venueId}|${event.eventDate}|${event.titleRaw}`)
+      // Try exact title_raw match first; fall back to normalized key so that
+      // events already in the DB (returned as UPDATEs rather than INSERTs by
+      // the upsert) are still found even when title_raw casing drifted.
+      const id =
+        ids.get(`${venueId}|${event.eventDate}|${event.titleRaw}`) ??
+        ids.get(`${venueId}|${event.eventDate}|norm:${normalizeTitle(event.titleRaw)}`)
       if (!id) continue
       sourceRecords.push({ event_id: id, source_url: event.sourceUrl, raw_payload: event.payload ?? null })
     }

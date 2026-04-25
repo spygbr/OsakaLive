@@ -55,7 +55,10 @@ export class UDiscoverSource extends AggregatorSource {
           eventDate: isoDate,
           titleRaw: currentTitle,
           venueHint,
-          sourceUrl: url,
+          // No per-event detail URL — this is a single long-form aggregator page.
+          // Setting the index URL would show the same link on every event, which is
+          // misleading. Null suppresses the Source button in the UI.
+          sourceUrl: null,
           description: paren.trim(),
           payload: { rawParen: paren.trim() },
         })

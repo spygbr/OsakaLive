@@ -48,7 +48,10 @@ export class UnionwaySource extends AggregatorSource {
         eventDate: isoDate,
         titleRaw: currentTitle,
         venueHint,
-        sourceUrl: url,
+        // Single flat page with no per-event anchor or detail URL.
+        // Setting the homepage URL would show the same link on every event.
+        // Null suppresses the Source button in the UI.
+        sourceUrl: null,
         description: line,
         payload: { rawLine: line },
       })
