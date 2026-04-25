@@ -90,6 +90,10 @@ export function parseVenueSchedule(html: string, sourceUrl: string): ParseResult
     .replace(/<style[\s\S]*?<\/style>/gi, '')
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/(?:div|li|p|tr|td|th|h[1-6]|section|article|header|footer|span)[^>]*>/gi, '\n')
+    // Inject ticket-page hrefs into the text stream BEFORE stripping tags so
+    // they survive into per-event context windows (TICKET_URL_RE won't find
+    // them otherwise once the <a> markup is gone).
+    .replace(/<a\s[^>]*href="(https?:\/\/(?:eplus\.jp|t\.livepocket\.jp|l-tike\.com|pia\.jp|ticket\.lawson\.co\.jp)[^"]*)"/gi, ' $1 ')
     .replace(/<[^>]+>/g, ' ')
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
@@ -159,8 +163,10 @@ export function parseVenueSchedule(html: string, sourceUrl: string): ParseResult
       const n = parseInt((pm[1] ?? pm[2]).replace(/,/g, ''), 10)
       if (!Number.isNaN(n) && n >= 500 && n <= 30000) prices.push(n)
     }
-    const ticketMatch = TICKET_URL_RE.exec(html)
+    // Scope ticket URL search to this event's context window, not the whole
+    // page — prevents a single ticket link from leaking onto every event.
     TICKET_URL_RE.lastIndex = 0
+    const ticketMatch = TICKET_URL_RE.exec(ctx)
 
     const description = lineup.length > 0
       ? `With ${lineup.slice(0, 6).join(', ')}${lineup.length > 6 ? ' and more' : ''}.`
@@ -176,9 +182,22 @@ export function parseVenueSchedule(html: string, sourceUrl: string): ParseResult
       ticketUrl: ticketMatch?.[0] ?? null,
       description,
       lineup,
-      sourceUrl,
+      // This function always parses an index/schedule page — we have no
+      // per-event detail URL, so sourceUrl is null. Custom sources
+      // (club-joule, drop) set their own per-event sourceUrl directly.
+      sourceUrl: null,
       payload: { lineup },
     })
+  }
+
+  // Sanity guard: if the same ticket URL appears on ≥ 2 events it's an index
+  // or venue-wide link rather than per-event — null it out for all of them.
+  const ticketFreq = new Map<string, number>()
+  for (const e of events) {
+    if (e.ticketUrl) ticketFreq.set(e.ticketUrl, (ticketFreq.get(e.ticketUrl) ?? 0) + 1)
+  }
+  for (const e of events) {
+    if (e.ticketUrl && (ticketFreq.get(e.ticketUrl) ?? 0) >= 2) e.ticketUrl = null
   }
 
   return { events, rejected }

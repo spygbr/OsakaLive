@@ -149,14 +149,14 @@ async function upsertEvents(
 async function upsertEventSources(
   supabase: SupabaseClient,
   sourceId: string,
-  records: Array<{ event_id: string; source_url: string; raw_payload: unknown }>,
+  records: Array<{ event_id: string; source_url: string | null; raw_payload: unknown }>,
 ): Promise<void> {
   if (records.length === 0) return
   // Dedupe by (event_id, source_id) — multiple raw titles can resolve to the
   // same event_id (because they normalize the same), which would otherwise
   // trip the unique constraint inside one upsert batch.
   const seen = new Set<string>()
-  const rows: Array<{ event_id: string; source_id: string; source_url: string; raw_payload: unknown }> = []
+  const rows: Array<{ event_id: string; source_id: string; source_url: string | null; raw_payload: unknown }> = []
   for (const r of records) {
     const key = `${r.event_id}|${sourceId}`
     if (seen.has(key)) continue
@@ -274,7 +274,7 @@ export async function runSource(
     for (const e of out.events) {
       const v = validateEvent({ titleRaw: e.titleRaw, eventDate: e.eventDate })
       if (v.ok) valid.push(e)
-      else rejects.push({ rawLine: e.titleRaw, reason: v.reason, sourceUrl: e.sourceUrl, payload: e.payload })
+      else rejects.push({ rawLine: e.titleRaw, reason: v.reason, sourceUrl: e.sourceUrl ?? undefined, payload: e.payload })
     }
 
     // ── Resolve venues ─────────────────────────────────────────────────
@@ -290,7 +290,7 @@ export async function runSource(
         resolved.push({ event: e, venueId })
       } else {
         result.unresolved++
-        rejects.push({ rawLine: e.venueHint ?? e.titleRaw, reason: 'venue_unresolved', sourceUrl: e.sourceUrl, payload: e.payload })
+        rejects.push({ rawLine: e.venueHint ?? e.titleRaw, reason: 'venue_unresolved', sourceUrl: e.sourceUrl ?? undefined, payload: e.payload })
       }
     }
 
@@ -312,7 +312,7 @@ export async function runSource(
     result.upserted = upserted
 
     // ── Upsert event_sources ───────────────────────────────────────────
-    type SourceRecord = { event_id: string; source_url: string; raw_payload: unknown }
+    type SourceRecord = { event_id: string; source_url: string | null; raw_payload: unknown }
     const sourceRecords: SourceRecord[] = []
     for (const { event, venueId } of resolved) {
       const id = ids.get(`${venueId}|${event.eventDate}|${event.titleRaw}`)

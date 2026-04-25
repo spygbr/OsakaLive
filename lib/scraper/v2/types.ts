@@ -29,8 +29,12 @@ export type RawEvent = {
    */
   venueId?: string
   venueHint?: string
-  /** The detail-page URL this event came from. */
-  sourceUrl: string
+  /**
+   * The detail-page URL this event came from.
+   * Null when the source only has an index/schedule page (no per-event URLs).
+   * UI: hide the "Source" button when null.
+   */
+  sourceUrl: string | null
   /** Anything else the source wants to keep around (stored on event_sources.raw_payload). */
   payload?: Record<string, unknown>
 }
