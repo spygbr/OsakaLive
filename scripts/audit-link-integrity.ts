@@ -67,11 +67,14 @@ const MD_PATH  = argVal('--md')  ?? `audit/link-integrity-${today}.md`
 // ── types ───────────────────────────────────────────────────────────────────
 type EventRow = {
   id: string
-  slug: string
+  slug: string | null
   event_date: string
   venue_id: string | null
-  source_url: string | null
   ticket_url: string | null
+  // source_url isn't on `events` — it lives on the `event_sources` junction.
+  // We pull the first non-null one (matches lib/supabase/queries normalizeEvent).
+  event_sources: { source_url: string | null }[] | null
+  source_url?: string | null
 }
 type VenueRow = {
   id: string
@@ -101,18 +104,22 @@ async function main() {
     (venues as VenueRow[]).map((v) => [v.id, v]),
   )
 
-  // Pull events (paginate; supabase caps at 1000)
+  // Pull events (paginate; supabase caps at 1000). source_url comes from the
+  // event_sources junction table, so we join and flatten.
   const events: EventRow[] = []
   const pageSize = 1000
   for (let from = 0; ; from += pageSize) {
     const { data, error } = await supabase
       .from('events')
-      .select('id, slug, event_date, venue_id, source_url, ticket_url')
+      .select('id, slug, event_date, venue_id, ticket_url, event_sources(source_url)')
       .order('event_date', { ascending: true })
       .range(from, from + pageSize - 1)
     if (error) throw error
     if (!data || data.length === 0) break
-    events.push(...(data as EventRow[]))
+    for (const r of data as EventRow[]) {
+      r.source_url = r.event_sources?.find((s) => s.source_url)?.source_url ?? null
+      events.push(r)
+    }
     if (data.length < pageSize) break
   }
 

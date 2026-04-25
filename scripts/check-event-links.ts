@@ -60,11 +60,12 @@ const TIMEOUT_MS = 10_000
 // ── types ──────────────────────────────────────────────────────────────────
 type EventRow = {
   id: string
-  slug: string
+  slug: string | null
   event_date: string
   venue_id: string | null
-  source_url: string | null
   ticket_url: string | null
+  event_sources: { source_url: string | null }[] | null
+  source_url?: string | null
 }
 type VenueRow = {
   id: string
@@ -175,12 +176,16 @@ async function main() {
     (venues as VenueRow[]).map((v) => [v.id, v]),
   )
 
-  const { data: events, error: eErr } = await supabase
+  const { data: rawEvents, error: eErr } = await supabase
     .from('events')
-    .select('id, slug, event_date, venue_id, source_url, ticket_url')
+    .select('id, slug, event_date, venue_id, ticket_url, event_sources(source_url)')
     .gte('event_date', today)
     .order('event_date', { ascending: true })
   if (eErr) throw eErr
+  const events: EventRow[] = (rawEvents as EventRow[]).map((r) => ({
+    ...r,
+    source_url: r.event_sources?.find((s) => s.source_url)?.source_url ?? null,
+  }))
 
   const tasks: Array<{
     event: EventRow
@@ -188,13 +193,13 @@ async function main() {
     kind: 'source' | 'ticket'
     url: string
   }> = []
-  for (const e of events as EventRow[]) {
+  for (const e of events) {
     const venue = e.venue_id ? venueById.get(e.venue_id) : undefined
     if (e.source_url) tasks.push({ event: e, venue, kind: 'source', url: e.source_url })
     if (e.ticket_url) tasks.push({ event: e, venue, kind: 'ticket', url: e.ticket_url })
   }
 
-  console.log(`Checking ${tasks.length} URLs across ${(events as EventRow[]).length} upcoming events…`)
+  console.log(`Checking ${tasks.length} URLs across ${events.length} upcoming events…`)
 
   const results = await runPool(tasks, async (t) => {
     const r = await probe(t.url)
@@ -209,7 +214,7 @@ async function main() {
   const lines: string[] = [
     `# Event link health — ${today}`,
     '',
-    `Checked: **${results.length}** URLs across **${(events as EventRow[]).length}** upcoming events.`,
+    `Checked: **${results.length}** URLs across **${events.length}** upcoming events.`,
     `OK: **${okCount}** · Flagged: **${issues.length}**`,
     '',
   ]
