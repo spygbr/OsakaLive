@@ -16,6 +16,7 @@ export type FilterParams = {
   dateFrom?: string      // YYYY-MM-DD (inclusive)
   dateTo?: string        // YYYY-MM-DD (inclusive)
   price?: 'free' | 'paid'
+  q?: string             // free-text search across event title (en/ja/norm)
 }
 
 export type AreaOption = { id: number; name_en: string; name_ja: string; slug: string }
@@ -262,6 +263,22 @@ export async function getFilteredEvents(
   if (filters.price === 'paid') query = query.not('ticket_price_adv', 'is', null)
   if (venueIds !== null) query = query.in('venue_id', venueIds)
   if (genreEventIds !== null) query = query.in('id', genreEventIds)
+
+  // Free-text search. PostgREST .or() takes comma-separated filters, so we
+  // strip characters that would break the parser or the LIKE pattern itself.
+  if (filters.q && filters.q.trim()) {
+    const term = filters.q
+      .trim()
+      .replace(/[,()*%_]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .slice(0, 80)
+    if (term.length > 0) {
+      const pat = `%${term}%`
+      query = query.or(
+        `title_en.ilike.${pat},title_ja.ilike.${pat},title_norm.ilike.${pat},title_raw.ilike.${pat}`,
+      )
+    }
+  }
 
   const { data, error } = await query
   if (error) console.error('[getFilteredEvents]', error.message)

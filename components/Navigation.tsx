@@ -1,15 +1,30 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Search, Home, Calendar, MapPin, User } from "lucide-react";
 import { useLang } from "@/lib/i18n/LangProvider";
 import { useFilterDrawer } from "@/lib/filter-drawer-context";
+import { SearchOverlay } from "@/components/SearchOverlay";
 
 export function TopNav() {
   const pathname = usePathname();
   const { t, toggle, lang } = useLang();
   const { open: openFilterDrawer } = useFilterDrawer();
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  // ⌘K / Ctrl+K toggles the search overlay from any page.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearchOpen((s) => !s);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   return (
     <header className="flex justify-between items-center w-full px-4 md:px-6 h-16 sticky top-0 z-50 bg-neutral-900 md:bg-[#131313] border-b md:border-b-2 border-primary-container md:border-outline-variant">
@@ -80,10 +95,16 @@ export function TopNav() {
         >
           {t("nav_lang")}
         </button>
-        <button className="hidden md:flex material-symbols-outlined text-primary">
+        <button
+          onClick={() => setSearchOpen(true)}
+          className="hidden md:flex material-symbols-outlined text-primary hover:text-primary-container active:scale-95 transition-transform"
+          aria-label={lang === "ja" ? "検索を開く" : "Open search"}
+          title={lang === "ja" ? "検索 (⌘K)" : "Search (⌘K)"}
+        >
           <Search className="w-6 h-6" />
         </button>
       </div>
+      <SearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} />
     </header>
   );
 }

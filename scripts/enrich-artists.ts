@@ -23,8 +23,12 @@
  *   npx tsx scripts/enrich-artists.ts --slugs slug-a,slug-b
  *   npx tsx scripts/enrich-artists.ts --skip-llm      # skip instagram fallback
  *   npx tsx scripts/enrich-artists.ts --skip-image    # skip image enrichment
- *   npx tsx scripts/enrich-artists.ts --force         # re-enrich artists that
- *                                                     # already have image_url
+ *   npx tsx scripts/enrich-artists.ts --skip-bio      # skip bio extraction
+ *   npx tsx scripts/enrich-artists.ts --bio-only      # only fill bio columns
+ *   npx tsx scripts/enrich-artists.ts --bio-min-len 120  # floor for bio quality
+ *   npx tsx scripts/enrich-artists.ts --translate-bios   # translate missing lang via Haiku
+ *   npx tsx scripts/enrich-artists.ts --include-site-fallback  # scrape artist website
+ *   npx tsx scripts/enrich-artists.ts --force         # re-enrich all columns
  *   npx tsx scripts/enrich-artists.ts --sources deezer,spotify,wikipedia
  *   npx tsx scripts/enrich-artists.ts --threshold 0.65
  *   npx tsx scripts/enrich-artists.ts --no-upload     # write source URL directly
@@ -58,11 +62,18 @@ if (fs.existsSync(envPath)) {
 }
 
 // ── Args ───────────────────────────────────────────────────────────────────────
-const DRY_RUN    = process.argv.includes('--dry-run')
-const SKIP_LLM   = process.argv.includes('--skip-llm')
-const SKIP_IMAGE = process.argv.includes('--skip-image')
-const FORCE      = process.argv.includes('--force')
-const NO_UPLOAD  = process.argv.includes('--no-upload')
+const DRY_RUN             = process.argv.includes('--dry-run')
+const SKIP_LLM            = process.argv.includes('--skip-llm')
+const SKIP_IMAGE          = process.argv.includes('--skip-image')
+const SKIP_BIO            = process.argv.includes('--skip-bio')
+const BIO_ONLY            = process.argv.includes('--bio-only')
+const TRANSLATE_BIOS      = process.argv.includes('--translate-bios')
+const INCLUDE_SITE_FALLBACK = process.argv.includes('--include-site-fallback')
+const FORCE               = process.argv.includes('--force')
+const NO_UPLOAD           = process.argv.includes('--no-upload')
+
+const bioMinLenIdx = process.argv.indexOf('--bio-min-len')
+const BIO_MIN_LEN: number = bioMinLenIdx !== -1 ? parseInt(process.argv[bioMinLenIdx + 1], 10) : 120
 
 const limitIdx = process.argv.indexOf('--limit')
 const LIMIT: number | null =
@@ -115,6 +126,8 @@ interface Artist {
   website_url:   string | null
   image_url:     string | null
   genre_id:      number | null
+  bio_en:        string | null
+  bio_ja:        string | null
 }
 
 interface RawCandidate {
@@ -128,6 +141,8 @@ interface RawCandidate {
   // Side-channel data captured alongside the image
   websiteUrl?:  string   // from TheAudioDB.strWebsite / Discogs.urls
   genreTags?:   string[] // from Spotify.genres / TheAudioDB.strGenre
+  bioEn?:       string   // English bio text
+  bioJa?:       string   // Japanese bio text
 }
 
 interface ScoredCandidate extends RawCandidate {
@@ -286,6 +301,114 @@ function scorePool(artist: Artist, pool: Map<Source, RawCandidate[]>): ScoredCan
   })
 }
 
+// ── Bio cleaning + picking ─────────────────────────────────────────────────────
+
+interface BioCandidate {
+  provider: Source | 'site'
+  lang:     'en' | 'ja'
+  text:     string
+  nameScore: number
+}
+
+interface PickedBio {
+  en:     string | null
+  ja:     string | null
+  source: string | null
+}
+
+const HTML_ENTITY: Record<string, string> = {
+  '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"',
+  '&#39;': "'", '&nbsp;': ' ', '&hellip;': '…', '&mdash;': '—', '&ndash;': '–',
+}
+
+function cleanBio(raw: string): string {
+  // Strip HTML tags
+  let s = raw.replace(/<[^>]+>/g, ' ')
+  // Decode HTML entities
+  s = s.replace(/&[a-z#0-9]+;/gi, (e) => HTML_ENTITY[e] ?? ' ')
+  // Strip Wikipedia reference markers like [1], [要出典]
+  s = s.replace(/\[\d+\]/g, '').replace(/\[要出典\]/g, '').replace(/\[citation needed\]/gi, '')
+  // Strip Discogs link tags [url=...][/url], [a=Name], [i]...[/i], [b]...[/b]
+  s = s.replace(/\[url=[^\]]*\](.*?)\[\/url\]/gi, '$1')
+  s = s.replace(/\[(?:a|b|i|u)=[^\]]*\]/gi, '').replace(/\[\/(?:a|b|i|u)\]/gi, '')
+  // Collapse whitespace
+  s = s.replace(/[\r\n\t]+/g, ' ').replace(/ {2,}/g, ' ').trim()
+  // Trim to ≤1500 chars on a sentence boundary
+  if (s.length > 1500) {
+    const cut = s.slice(0, 1500)
+    const lastSentence = Math.max(
+      cut.lastIndexOf('. '),
+      cut.lastIndexOf('。'),
+      cut.lastIndexOf('! '),
+      cut.lastIndexOf('? '),
+    )
+    s = lastSentence > 800 ? cut.slice(0, lastSentence + 1).trim() : cut.trim()
+  }
+  return s
+}
+
+function isBioJunk(text: string, artistName: string): boolean {
+  if (!text) return true
+  const t = text.trim()
+  // Reject if it's just the artist name (possibly with a date)
+  const nameNorm = norm(artistName)
+  const textNorm = norm(t)
+  if (textNorm === nameNorm) return true
+  if (/^\w[\w\s]+,\s+\d{4}/.test(t) && t.length < 60) return true
+  return false
+}
+
+function scoreBioLen(len: number): number {
+  if (len < BIO_MIN_LEN) return 0
+  if (len >= 200 && len <= 800) return 1.0
+  if (len < 200) return 0.6 + (len - BIO_MIN_LEN) / (200 - BIO_MIN_LEN) * 0.4
+  if (len > 2000) return 0.5
+  // 800–2000: slight penalty
+  return 1.0 - (len - 800) / 1200 * 0.3
+}
+
+const BIO_PROVIDER_RANK: Record<string, number> = {
+  wikipedia:   10,
+  wikidata:     9,
+  theaudiodb:   8,
+  bandcamp:     7,
+  discogs:      6,
+  musicbrainz:  5,
+  site:         4,
+}
+
+function pickBio(candidates: BioCandidate[]): PickedBio {
+  const score = (c: BioCandidate): number => {
+    const lenScore  = scoreBioLen(c.text.length)
+    if (lenScore === 0) return 0
+    const rank      = (BIO_PROVIDER_RANK[c.provider] ?? 1) / 10
+    return lenScore * 0.6 + c.nameScore * 0.2 + rank * 0.2
+  }
+
+  // Detect boilerplate: same text from ≥2 providers → penalise
+  const textCounts = new Map<string, number>()
+  for (const c of candidates) {
+    const key = c.text.slice(0, 80)
+    textCounts.set(key, (textCounts.get(key) ?? 0) + 1)
+  }
+  const isDupe = (c: BioCandidate) => (textCounts.get(c.text.slice(0, 80)) ?? 0) >= 2
+
+  const sorted = [...candidates]
+    .filter((c) => score(c) > 0 && !isDupe(c))
+    .sort((a, b) => score(b) - score(a))
+
+  const best = (lang: 'en' | 'ja') => sorted.find((c) => c.lang === lang) ?? null
+
+  const enWinner = best('en')
+  const jaWinner = best('ja')
+
+  return {
+    en:     enWinner?.text ?? null,
+    ja:     jaWinner?.text ?? null,
+    source: enWinner ? String(enWinner.provider) : jaWinner ? String(jaWinner.provider) : null,
+  }
+}
+
 // ── Providers ──────────────────────────────────────────────────────────────────
 
 async function searchDeezer(artist: Artist): Promise<RawCandidate[]> {
@@ -346,7 +469,16 @@ async function searchBandcamp(artist: Artist): Promise<RawCandidate[]> {
       const bioPicMatch = bandHtml.match(/<div[^>]*class="[^"]*bio-pic[^"]*"[^>]*>[\s\S]*?<img[^>]+src=["']([^"']+)["']/)
       const imageUrl = bioPicMatch?.[1] ?? ogMatch?.[1]
       if (!imageUrl) continue
-      out.push({ sourceId: bandUrl, sourceUrl: bandUrl, imageUrl, matchName: bandTitle, notes: 'Bandcamp band page' })
+
+      // Extract bio text: <meta name="description"> or .bio block
+      let bioEn: string | undefined
+      const metaDescMatch = bandHtml.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["']/)
+                         ?? bandHtml.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']description["']/)
+      const bioDivMatch = bandHtml.match(/<div[^>]*class="[^"]*(?:bio|signed-out-msgs)[^"]*"[^>]*>([\s\S]{20,1200}?)<\/div>/)
+      const bioText = bioDivMatch?.[1] ?? metaDescMatch?.[1]
+      if (bioText) bioEn = bioText
+
+      out.push({ sourceId: bandUrl, sourceUrl: bandUrl, imageUrl, matchName: bandTitle, notes: 'Bandcamp band page', bioEn })
       break
     } catch { /* swallow */ }
     await sleep(1000)
@@ -375,6 +507,7 @@ async function searchWikipedia(artist: Artist): Promise<RawCandidate[]> {
       for (const page of Object.values(imgJson.query?.pages ?? {})) {
         if ('missing' in page || !page.original) continue
         // Validate: musician keywords in extract
+        let capturedExtract = ''
         try {
           const extRes = await fetch(
             `${base}?action=query&format=json&origin=*&prop=extracts&exintro=1&explaintext=1&titles=${encodeURIComponent(page.title)}`,
@@ -384,15 +517,35 @@ async function searchWikipedia(artist: Artist): Promise<RawCandidate[]> {
             const extJson = await extRes.json() as { query?: { pages?: Record<string, { extract?: string }> } }
             const extract = Object.values(extJson.query?.pages ?? {}).map((p) => p.extract ?? '').join(' ')
             if (!/musician|singer|band|composer|rapper|dj|group|musical group|rock|punk|metal|noise|indie|idol|歌手|ミュージシャン|バンド/i.test(extract)) continue
+            capturedExtract = extract
           }
         } catch { /* allow through */ }
         if (scoreName(artist, page.title) === 0) continue
+
+        // Fetch ja Wikipedia bio if this is an en article (separate query)
+        let bioJa: string | undefined
+        if (lang === 'en' && artist.name_ja) {
+          try {
+            const jaExtRes = await fetch(
+              `https://ja.wikipedia.org/w/api.php?action=query&format=json&origin=*&prop=extracts&exintro=1&explaintext=1&titles=${encodeURIComponent(artist.name_ja)}`,
+              { signal: AbortSignal.timeout(10_000) },
+            )
+            if (jaExtRes.ok) {
+              const jaExtJson = await jaExtRes.json() as { query?: { pages?: Record<string, { extract?: string; missing?: string }> } }
+              const jaPage = Object.values(jaExtJson.query?.pages ?? {}).find((p) => !('missing' in p))
+              if (jaPage?.extract) bioJa = jaPage.extract
+            }
+          } catch { /* ignore */ }
+        }
+
         out.push({
           sourceId:  page.title,
           sourceUrl: `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(page.title)}`,
           imageUrl:  page.original.source,
           width: page.original.width, height: page.original.height,
           matchName: page.title, notes: `Wikipedia ${lang}`,
+          bioEn: lang === 'en' && capturedExtract ? capturedExtract : undefined,
+          bioJa: lang === 'ja' ? capturedExtract || undefined : bioJa || undefined,
         })
       }
     } catch { /* swallow */ }
@@ -412,15 +565,17 @@ async function searchTheAudioDB(artist: Artist): Promise<RawCandidate[]> {
       if (!res.ok) continue
       const json = await res.json() as {
         artists?: {
-          idArtist:        string
-          strArtist:       string
-          strArtistThumb?: string
-          strArtistFanart?: string
-          strWebsite?:     string
-          strGenre?:       string
-          strMood?:        string
-          strStyle?:       string
-          strCountry?:     string
+          idArtist:           string
+          strArtist:          string
+          strArtistThumb?:    string
+          strArtistFanart?:   string
+          strWebsite?:        string
+          strGenre?:          string
+          strMood?:           string
+          strStyle?:          string
+          strCountry?:        string
+          strBiographyEN?:    string
+          strBiographyJP?:    string
         }[]
       }
       for (const a of json.artists ?? []) {
@@ -443,6 +598,8 @@ async function searchTheAudioDB(artist: Artist): Promise<RawCandidate[]> {
           notes:     [a.strArtistThumb ? undefined : 'fanart', a.strCountry].filter(Boolean).join('; ') || undefined,
           websiteUrl,
           genreTags: genreTags.length ? genreTags : undefined,
+          bioEn:     a.strBiographyEN || undefined,
+          bioJa:     a.strBiographyJP || undefined,
         })
       }
     } catch { /* swallow */ }
@@ -481,6 +638,7 @@ async function searchDiscogs(artist: Artist): Promise<RawCandidate[]> {
           if (!detailRes.ok) continue
           const detail = await detailRes.json() as {
             name: string
+            profile?: string
             images?: { uri: string; type: 'primary' | 'secondary'; width?: number; height?: number }[]
             urls?: string[]
           }
@@ -499,6 +657,7 @@ async function searchDiscogs(artist: Artist): Promise<RawCandidate[]> {
             matchName: detail.name ?? r.title,
             notes: primary.type === 'secondary' ? 'secondary image' : undefined,
             websiteUrl,
+            bioEn: detail.profile || undefined,
           })
         } catch { /* swallow detail */ }
       }
@@ -544,8 +703,10 @@ async function searchWikidata(artist: Artist): Promise<RawCandidate[]> {
     for (const id of ids) {
       const e = json.entities[id]
       if (!e) continue
-      const label = (e.labels.en ?? e.labels.ja)?.value ?? ''
-      const desc  = (e.descriptions?.en ?? e.descriptions?.ja)?.value ?? ''
+      const label   = (e.labels.en ?? e.labels.ja)?.value ?? ''
+      const desc    = (e.descriptions?.en ?? e.descriptions?.ja)?.value ?? ''
+      const descEn  = e.descriptions?.en?.value ?? ''
+      const descJa  = e.descriptions?.ja?.value ?? ''
       if (!/musician|singer|band|composer|rapper|idol|dj|group|artist|歌手|ミュージシャン|バンド/i.test(desc)) continue
       const p18 = e.claims['P18']?.[0]?.mainsnak?.datavalue?.value as string | undefined
       if (!p18 || scoreName(artist, label) === 0) continue
@@ -555,6 +716,9 @@ async function searchWikidata(artist: Artist): Promise<RawCandidate[]> {
         sourceUrl: `https://www.wikidata.org/wiki/${id}`,
         imageUrl:  `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(fileName)}?width=1200`,
         matchName: label, notes: desc,
+        // Wikidata descriptions are short one-liners; useful when full Wiki article is missing
+        bioEn: descEn || undefined,
+        bioJa: descJa || undefined,
       })
     }
   } catch { /* ignore */ }
@@ -570,16 +734,39 @@ async function searchMusicBrainz(artist: Artist): Promise<RawCandidate[]> {
         { headers: { 'User-Agent': OL_UA, Accept: 'application/json' }, signal: AbortSignal.timeout(12_000) },
       )
       if (!res.ok) { await sleep(1100); continue }
-      const json = await res.json() as { artists?: { id: string; name: string; country?: string }[] }
+      const json = await res.json() as { artists?: { id: string; name: string; country?: string; annotation?: { text?: string } }[] }
       for (const a of json.artists ?? []) {
         if (scoreName(artist, a.name) === 0) continue
+
+        // Fetch full artist record with annotation
+        let bioEn: string | undefined
+        try {
+          const detailRes = await fetch(
+            `https://musicbrainz.org/ws/2/artist/${a.id}?fmt=json&inc=annotation`,
+            { headers: { 'User-Agent': OL_UA, Accept: 'application/json' }, signal: AbortSignal.timeout(10_000) },
+          )
+          if (detailRes.ok) {
+            const detail = await detailRes.json() as { annotation?: { text?: string } }
+            if (detail.annotation?.text) bioEn = detail.annotation.text
+          }
+        } catch { /* ignore */ }
+        await sleep(1100)
+
         const coverUrl = `https://coverartarchive.org/artist/${a.id}/front-500`
         try {
           const head = await fetch(coverUrl, { method: 'HEAD', headers: { 'User-Agent': OL_UA }, signal: AbortSignal.timeout(8_000) })
           if (head.ok) out.push({
             sourceId: a.id, sourceUrl: `https://musicbrainz.org/artist/${a.id}`,
-            imageUrl: coverUrl, matchName: a.name, notes: a.country ?? undefined,
+            imageUrl: coverUrl, matchName: a.name, notes: a.country ?? undefined, bioEn,
           })
+          else if (bioEn) {
+            // No cover art but we have a bio — add a placeholder candidate
+            // (won't contribute to image scoring but bio is captured via pool)
+            out.push({
+              sourceId: a.id, sourceUrl: `https://musicbrainz.org/artist/${a.id}`,
+              imageUrl: '', matchName: a.name, notes: 'annotation only', bioEn,
+            })
+          }
         } catch { /* no cover art */ }
         await sleep(1100)
       }
@@ -871,6 +1058,89 @@ async function processArtist(artist: Artist): Promise<ReportRow> {
     }
   }
 
+  // ── Step 3b: Bio extraction ──────────────────────────────────────────────────
+  if (!SKIP_BIO && (!artist.bio_en || !artist.bio_ja || FORCE)) {
+    const bioCandidates: BioCandidate[] = []
+    for (const [src, cands] of pool) {
+      for (const c of cands) {
+        const ns = scoreName(artist, c.matchName)
+        if (ns < 0.85) continue
+        if (c.bioEn) {
+          const cleaned = cleanBio(c.bioEn)
+          if (!isBioJunk(cleaned, artist.name_en)) {
+            bioCandidates.push({ provider: src, lang: 'en', text: cleaned, nameScore: ns })
+          }
+        }
+        if (c.bioJa) {
+          const cleaned = cleanBio(c.bioJa)
+          const artistName = artist.name_ja ?? artist.name_en
+          if (!isBioJunk(cleaned, artistName)) {
+            bioCandidates.push({ provider: src, lang: 'ja', text: cleaned, nameScore: ns })
+          }
+        }
+      }
+    }
+
+    // Site fallback
+    if (INCLUDE_SITE_FALLBACK && artist.website_url && !bioCandidates.some((c) => c.lang === 'en')) {
+      try {
+        const { fetchSiteBio } = await import('./lib/site-bio.js')
+        const siteBio = await fetchSiteBio(artist.website_url)
+        if (siteBio) bioCandidates.push({ provider: 'site', lang: 'en', text: siteBio, nameScore: 0.9 })
+      } catch { /* ignore */ }
+    }
+
+    const picked = pickBio(bioCandidates)
+
+    // Optional Haiku translation
+    if (TRANSLATE_BIOS && process.env.ANTHROPIC_API_KEY) {
+      if (!picked.en && picked.ja) {
+        try {
+          const translated = await getHaiku().askJson<{ text: string }>({
+            prompt: `Translate this Japanese artist biography to English. Return only JSON: {"text": "..."}
+Biography: ${picked.ja.slice(0, 800)}`,
+            maxTokens: 600,
+            validate: (x): x is { text: string } => typeof x === 'object' && x !== null && typeof (x as Record<string,unknown>).text === 'string',
+            label: 'translate-bio',
+          })
+          if (translated?.text) {
+            picked.en = cleanBio(translated.text)
+            picked.source = `translated:haiku-from-ja`
+          }
+        } catch { /* ignore */ }
+      } else if (!picked.ja && picked.en) {
+        try {
+          const translated = await getHaiku().askJson<{ text: string }>({
+            prompt: `Translate this English artist biography to Japanese. Return only JSON: {"text": "..."}
+Biography: ${picked.en.slice(0, 800)}`,
+            maxTokens: 800,
+            validate: (x): x is { text: string } => typeof x === 'object' && x !== null && typeof (x as Record<string,unknown>).text === 'string',
+            label: 'translate-bio',
+          })
+          if (translated?.text) {
+            picked.ja = cleanBio(translated.text)
+            if (picked.source && !picked.source.includes('translated')) {
+              picked.source += '+translated-ja'
+            }
+          }
+        } catch { /* ignore */ }
+      }
+    }
+
+    if (picked.en) {
+      updates.bio_en     = picked.en
+      updates.bio_source = picked.source ?? 'unknown'
+      console.log(`   bio_en (${picked.en.length}ch) ← ${picked.source}`)
+    }
+    if (picked.ja) {
+      updates.bio_ja = picked.ja
+      console.log(`   bio_ja (${picked.ja.length}ch) ← ${picked.source ?? 'unknown'}`)
+    }
+    if (!picked.en && !picked.ja) {
+      console.log(`   bio miss (${bioCandidates.length} candidates below threshold)`)
+    }
+  }
+
   // ── Step 4: Image ────────────────────────────────────────────────────────────
   let winner: ScoredCandidate | null = null
   let verdict: ReportRow['verdict'] = 'miss'
@@ -922,12 +1192,15 @@ async function processArtist(artist: Artist): Promise<ReportRow> {
   }
 
   // ── Step 6: Atomic write ─────────────────────────────────────────────────────
-  // Only fill columns that are currently null
+  // Only fill columns that are currently null (unless --force)
   const filteredUpdates: typeof updates = {}
-  if (updates.image_url     && !artist.image_url)     filteredUpdates.image_url     = updates.image_url
-  if (updates.website_url   && !artist.website_url)   filteredUpdates.website_url   = updates.website_url
-  if (updates.instagram_url && !artist.instagram_url) filteredUpdates.instagram_url = updates.instagram_url
-  if (updates.genre_id      && !artist.genre_id)      filteredUpdates.genre_id      = updates.genre_id
+  if (updates.image_url     && (!artist.image_url     || FORCE)) filteredUpdates.image_url     = updates.image_url
+  if (updates.website_url   && (!artist.website_url   || FORCE)) filteredUpdates.website_url   = updates.website_url
+  if (updates.instagram_url && (!artist.instagram_url || FORCE)) filteredUpdates.instagram_url = updates.instagram_url
+  if (updates.genre_id      && (!artist.genre_id      || FORCE)) filteredUpdates.genre_id      = updates.genre_id
+  if (updates.bio_en        && (!artist.bio_en        || FORCE)) filteredUpdates.bio_en        = updates.bio_en
+  if (updates.bio_ja        && (!artist.bio_ja        || FORCE)) filteredUpdates.bio_ja        = updates.bio_ja
+  if (updates.bio_source    && (updates.bio_en || updates.bio_ja)) filteredUpdates.bio_source = updates.bio_source
 
   if (Object.keys(filteredUpdates).length === 0) {
     console.log('   ⏭  nothing to write')
@@ -946,11 +1219,14 @@ async function processArtist(artist: Artist): Promise<ReportRow> {
 async function main(): Promise<void> {
   let query = supabase
     .from('artists')
-    .select('id, slug, name_en, name_ja, instagram_url, website_url, image_url, genre_id')
+    .select('id, slug, name_en, name_ja, instagram_url, website_url, image_url, genre_id, bio_en, bio_ja')
     .order('name_en')
 
   if (SLUGS?.length) {
     query = query.in('slug', SLUGS)
+  } else if (BIO_ONLY) {
+    // Only artists missing at least one bio column
+    query = query.or('bio_en.is.null,bio_ja.is.null')
   } else if (!FORCE) {
     query = query.is('image_url', null)
   }
@@ -965,10 +1241,14 @@ async function main(): Promise<void> {
     `\n🎸  enrich-artists v3 — ${artists.length} artist(s)` +
     `  sources=[${[...ENABLED_SOURCES].join(',')}]` +
     `  threshold=${THRESHOLD}` +
-    (DRY_RUN    ? ' [dry-run]'    : '') +
-    (SKIP_LLM   ? ' [skip-llm]'  : '') +
-    (SKIP_IMAGE ? ' [skip-image]' : '') +
-    (NO_UPLOAD  ? ' [no-upload]'  : '') +
+    (DRY_RUN             ? ' [dry-run]'          : '') +
+    (SKIP_LLM            ? ' [skip-llm]'         : '') +
+    (SKIP_IMAGE          ? ' [skip-image]'        : '') +
+    (SKIP_BIO            ? ' [skip-bio]'          : '') +
+    (BIO_ONLY            ? ' [bio-only]'          : '') +
+    (TRANSLATE_BIOS      ? ' [translate-bios]'    : '') +
+    (INCLUDE_SITE_FALLBACK ? ' [site-fallback]'   : '') +
+    (NO_UPLOAD           ? ' [no-upload]'         : '') +
     '\n',
   )
 
@@ -984,16 +1264,20 @@ async function main(): Promise<void> {
   const hits      = rows.filter((r) => r.verdict === 'hit').length
   const ambig     = rows.filter((r) => r.verdict === 'ambiguous').length
   const misses    = rows.filter((r) => r.verdict === 'miss').length
-  const wroteSite = rows.filter((r) => r.updates.website_url).length
-  const wroteIG   = rows.filter((r) => r.updates.instagram_url).length
+  const wroteSite  = rows.filter((r) => r.updates.website_url).length
+  const wroteIG    = rows.filter((r) => r.updates.instagram_url).length
   const wroteGenre = rows.filter((r) => r.updates.genre_id).length
-  const total     = rows.length
-  const pct       = (n: number) => ((n / total) * 100).toFixed(0)
+  const wroteBioEn = rows.filter((r) => r.updates.bio_en).length
+  const wroteBioJa = rows.filter((r) => r.updates.bio_ja).length
+  const total      = rows.length
+  const pct        = (n: number) => ((n / total) * 100).toFixed(0)
 
   console.log('\n─────────────────────────────────────────────────────')
   console.log(`  image HIT        ${hits.toString().padStart(3)}  (${pct(hits)}%)`)
   console.log(`  image AMBIGUOUS  ${ambig.toString().padStart(3)}  (${pct(ambig)}%)`)
   console.log(`  image MISS       ${misses.toString().padStart(3)}  (${pct(misses)}%)`)
+  console.log(`  bio_en           ${wroteBioEn.toString().padStart(3)}  written`)
+  console.log(`  bio_ja           ${wroteBioJa.toString().padStart(3)}  written`)
   console.log(`  website_url      ${wroteSite.toString().padStart(3)}  written`)
   console.log(`  instagram_url    ${wroteIG.toString().padStart(3)}  written (LLM)`)
   console.log(`  genre_id         ${wroteGenre.toString().padStart(3)}  written`)

@@ -29,6 +29,7 @@ type SearchPageProps = {
     date_from?: string;
     date_to?: string;
     price?: string;
+    q?: string;
   }>;
 };
 
@@ -46,6 +47,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       params.price === "free" ? "free"
       : params.price === "paid" ? "paid"
       : undefined,
+    q: params.q || undefined,
   };
 
   const [events, areas, genres] = await Promise.all([
@@ -94,6 +96,11 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
               ? `${events.length} ${t('search_filtered')}`
               : `${t('search_archiving').replace('UPCOMING EVENTS', `${events.length} UPCOMING EVENT${events.length !== 1 ? 'S' : ''}`)}`}
           </p>
+          {filters.q && (
+            <p className="mt-3 font-mono text-[11px] uppercase tracking-widest text-primary">
+              {lang === 'ja' ? '検索' : 'Searching'}: &quot;{filters.q}&quot;
+            </p>
+          )}
         </section>
 
         {/* ── Event List ──────────────────────────────────────────────────── */}
