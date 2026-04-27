@@ -1,19 +1,21 @@
 "use client";
 
+import { useState } from "react";
 import { usePathname } from "next/navigation";
 import { Map as MapIcon, Calendar } from "lucide-react";
-import type { AreaOption, GenreOption } from "@/lib/supabase/queries";
+import type { AreaOption, GenreOptionWithCount } from "@/lib/supabase/queries";
 import { useLang } from "@/lib/i18n/LangProvider";
 import { useFilters } from "@/hooks/use-filters";
 
 interface SidebarProps {
   areas?: AreaOption[];
-  genres?: GenreOption[];
+  genres?: GenreOptionWithCount[];
 }
 
 export function Sidebar({ areas = [], genres = [] }: SidebarProps) {
   const pathname = usePathname();
   const { t, lang } = useLang();
+  const [showAllGenres, setShowAllGenres] = useState(false);
   const {
     area,
     genre,
@@ -141,8 +143,18 @@ export function Sidebar({ areas = [], genres = [] }: SidebarProps) {
 
       {/* ── Genre ─────────────────────────────────────────────────────────── */}
       <div className="py-4">
-        <div className="px-6 mb-2 text-[10px] text-primary font-bold tracking-widest uppercase">
-          {t("sidebar_genre")}
+        <div className="px-6 mb-2 flex items-center justify-between">
+          <div className="text-[10px] text-primary font-bold tracking-widest uppercase">
+            {t("sidebar_genre")}
+          </div>
+          {genres.some((g) => g.upcoming_count === 0) && (
+            <button
+              onClick={() => setShowAllGenres((v) => !v)}
+              className="text-[9px] font-mono text-outline hover:text-primary transition-colors uppercase"
+            >
+              {showAllGenres ? "LESS" : "ALL"}
+            </button>
+          )}
         </div>
         <div className="grid grid-cols-2 gap-px bg-outline-variant border-y border-outline-variant">
           <button
@@ -155,21 +167,26 @@ export function Sidebar({ areas = [], genres = [] }: SidebarProps) {
           >
             {t("sidebar_all")}
           </button>
-          {genres.map((g) => (
-            <button
-              key={g.slug}
-              onClick={() =>
-                setParam({ genre: genre === g.slug ? null : g.slug })
-              }
-              className={`p-2 text-[10px] font-bold uppercase transition-colors ${
-                genre === g.slug
-                  ? "bg-primary text-on-primary"
-                  : "bg-surface-container-lowest text-outline hover:bg-surface-container"
-              }`}
-            >
-              {g.name_en}
-            </button>
-          ))}
+          {genres
+            .filter((g) => showAllGenres || g.upcoming_count > 0 || genre === g.slug)
+            .map((g) => (
+              <button
+                key={g.slug}
+                onClick={() =>
+                  setParam({ genre: genre === g.slug ? null : g.slug })
+                }
+                className={`p-2 text-[10px] font-bold uppercase transition-colors ${
+                  genre === g.slug
+                    ? "bg-primary text-on-primary"
+                    : "bg-surface-container-lowest text-outline hover:bg-surface-container"
+                }`}
+              >
+                {g.name_en}
+                {g.upcoming_count > 0 && (
+                  <span className="ml-1 opacity-60">({g.upcoming_count})</span>
+                )}
+              </button>
+            ))}
         </div>
       </div>
 

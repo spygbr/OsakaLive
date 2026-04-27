@@ -1,15 +1,16 @@
 "use client";
 
+import { useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { X, Calendar, Map as MapIcon } from "lucide-react";
 import { useFilters } from "@/hooks/use-filters";
 import { useFilterDrawer } from "@/lib/filter-drawer-context";
 import { useLang } from "@/lib/i18n/LangProvider";
-import type { AreaOption, GenreOption } from "@/lib/supabase/queries";
+import type { AreaOption, GenreOptionWithCount } from "@/lib/supabase/queries";
 
 interface MobileFilterDrawerProps {
   areas?: AreaOption[];
-  genres?: GenreOption[];
+  genres?: GenreOptionWithCount[];
 }
 
 export function MobileFilterDrawer({
@@ -18,6 +19,7 @@ export function MobileFilterDrawer({
 }: MobileFilterDrawerProps) {
   const { isOpen, close } = useFilterDrawer();
   const { t, lang } = useLang();
+  const [showAllGenres, setShowAllGenres] = useState(false);
   const {
     area,
     genre,
@@ -172,8 +174,18 @@ export function MobileFilterDrawer({
 
               {/* GENRE */}
               <div className="py-4">
-                <div className="px-4 mb-2 text-[10px] text-primary font-bold tracking-widest uppercase">
-                  {t("sidebar_genre")}
+                <div className="px-4 mb-2 flex items-center justify-between">
+                  <div className="text-[10px] text-primary font-bold tracking-widest uppercase">
+                    {t("sidebar_genre")}
+                  </div>
+                  {genres.some((g) => g.upcoming_count === 0) && (
+                    <button
+                      onClick={() => setShowAllGenres((v) => !v)}
+                      className="text-[9px] font-mono text-outline hover:text-primary transition-colors uppercase"
+                    >
+                      {showAllGenres ? "LESS" : "ALL"}
+                    </button>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-px bg-outline-variant border-y border-outline-variant mx-4">
                   <button
@@ -186,21 +198,26 @@ export function MobileFilterDrawer({
                   >
                     {t("sidebar_all")}
                   </button>
-                  {genres.map((g) => (
-                    <button
-                      key={g.slug}
-                      onClick={() =>
-                        setParam({ genre: genre === g.slug ? null : g.slug })
-                      }
-                      className={`p-2 text-[10px] font-bold uppercase transition-colors ${
-                        genre === g.slug
-                          ? "bg-primary text-on-primary"
-                          : "bg-surface-container text-outline hover:bg-surface-container-high"
-                      }`}
-                    >
-                      {g.name_en}
-                    </button>
-                  ))}
+                  {genres
+                    .filter((g) => showAllGenres || g.upcoming_count > 0 || genre === g.slug)
+                    .map((g) => (
+                      <button
+                        key={g.slug}
+                        onClick={() =>
+                          setParam({ genre: genre === g.slug ? null : g.slug })
+                        }
+                        className={`p-2 text-[10px] font-bold uppercase transition-colors ${
+                          genre === g.slug
+                            ? "bg-primary text-on-primary"
+                            : "bg-surface-container text-outline hover:bg-surface-container-high"
+                        }`}
+                      >
+                        {g.name_en}
+                        {g.upcoming_count > 0 && (
+                          <span className="ml-1 opacity-60">({g.upcoming_count})</span>
+                        )}
+                      </button>
+                    ))}
                 </div>
               </div>
 

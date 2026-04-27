@@ -8,7 +8,7 @@ import { LangProvider } from "@/lib/i18n/LangProvider";
 import { FilterDrawerProvider } from "@/lib/filter-drawer-context";
 import { MobileFilterDrawer } from "@/components/MobileFilterDrawer";
 import { getLang } from "@/lib/i18n/server";
-import { getAreas, getGenres } from "@/lib/supabase/queries";
+import { getAreas, getGenresWithCounts } from "@/lib/supabase/queries";
 
 const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
@@ -34,7 +34,7 @@ export default async function RootLayout({
   const [lang, areas, genres] = await Promise.all([
     getLang(),
     getAreas(),
-    getGenres(),
+    getGenresWithCounts(),
   ]);
 
   return (

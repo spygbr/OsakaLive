@@ -3,7 +3,7 @@ import { CalendarDesktop } from "@/components/CalendarDesktop";
 import { CalendarMobile } from "@/components/CalendarMobile";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
-import { getEventsForMonth, getAreas, getGenres } from "@/lib/supabase/queries";
+import { getEventsForMonth, getAreas, getGenresWithCounts } from "@/lib/supabase/queries";
 import type { EventWithVenue } from "@/lib/supabase/queries";
 import { getLang } from "@/lib/i18n/server";
 
@@ -78,7 +78,7 @@ export default async function CalendarPage({
   const [events, areas, genres, lang] = await Promise.all([
     getEventsForMonth(year, month, calendarFilters),
     getAreas(),
-    getGenres(),
+    getGenresWithCounts(),
     getLang(),
   ]);
 

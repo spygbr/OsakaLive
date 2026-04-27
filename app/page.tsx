@@ -3,7 +3,7 @@ import { MobileHeroCarousel } from "@/components/MobileHeroCarousel";
 import Image from "next/image";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Star, ArrowRight } from "lucide-react";
-import { getFeaturedEvents, getTonightEvents, getUpcomingEvents, getAreas, getGenres } from "@/lib/supabase/queries";
+import { getFeaturedEvents, getTonightEvents, getUpcomingEvents, getAreas, getGenresWithCounts } from "@/lib/supabase/queries";
 import { formatTime, formatPrice, formatEventDateShort, availLabel, availClasses, placeholderImage } from "@/lib/utils";
 import { getLang } from "@/lib/i18n/server";
 import { createT } from "@/lib/i18n/translations";
@@ -19,7 +19,7 @@ export default async function Home() {
     getTonightEvents(10),
     getUpcomingEvents(4),
     getAreas(),
-    getGenres(),
+    getGenresWithCounts(),
   ]);
 
   const hero = featuredEvents[0];

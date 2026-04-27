@@ -21,6 +21,7 @@ export type FilterParams = {
 
 export type AreaOption = { id: number; name_en: string; name_ja: string; slug: string }
 export type GenreOption = { id: number; name_en: string; slug: string }
+export type GenreOptionWithCount = GenreOption & { upcoming_count: number }
 
 // ---------------------------------------------------------------------------
 // Shared types
@@ -493,4 +494,67 @@ export async function getGenres(): Promise<GenreOption[]> {
     .order('name_en', { ascending: true })
   if (error) console.error('[getGenres]', error.message)
   return (data ?? []) as GenreOption[]
+}
+
+/**
+ * All genres with upcoming event counts (for sidebar filter with counts).
+ * Uses 4 queries: genres, genre-tagged artists, their event_artist rows, then
+ * filters those events to upcoming-only. All sets are small (≤35 artists,
+ * ≤~100 event IDs) so no URL-limit risk.
+ */
+export async function getGenresWithCounts(): Promise<GenreOptionWithCount[]> {
+  const supabase = createServerClient()
+  const today = getTodayJST()
+
+  const [genresRes, artistsRes] = await Promise.all([
+    supabase.from('genres').select('id, name_en, slug').order('name_en', { ascending: true }),
+    supabase.from('artists').select('id, genre_id').not('genre_id', 'is', null),
+  ])
+
+  if (genresRes.error) console.error('[getGenresWithCounts:genres]', genresRes.error.message)
+  const genres = (genresRes.data ?? []) as GenreOption[]
+  const artistsWithGenre = (artistsRes.data ?? []) as { id: string; genre_id: number }[]
+
+  if (!artistsWithGenre.length) return genres.map((g) => ({ ...g, upcoming_count: 0 }))
+
+  const artistIds = artistsWithGenre.map((a) => a.id)
+  const artistGenreMap = new Map(artistsWithGenre.map((a) => [a.id, a.genre_id]))
+
+  // Get event_artist rows for genre-tagged artists
+  const { data: eaRows, error: eaError } = await supabase
+    .from('event_artists')
+    .select('event_id, artist_id')
+    .in('artist_id', artistIds)
+  if (eaError) console.error('[getGenresWithCounts:event_artists]', eaError.message)
+
+  // Build genre_id → Set<event_id>
+  const genreEventMap = new Map<number, Set<string>>()
+  for (const ea of eaRows ?? []) {
+    const gid = artistGenreMap.get(ea.artist_id)
+    if (!gid) continue
+    if (!genreEventMap.has(gid)) genreEventMap.set(gid, new Set())
+    genreEventMap.get(gid)!.add(ea.event_id)
+  }
+
+  const allEventIds = [...new Set((eaRows ?? []).map((ea) => ea.event_id as string))]
+  if (!allEventIds.length) return genres.map((g) => ({ ...g, upcoming_count: 0 }))
+
+  // Filter to upcoming events only
+  const { data: upcomingRows, error: upError } = await supabase
+    .from('events')
+    .select('id')
+    .in('id', allEventIds)
+    .gte('event_date', today)
+  if (upError) console.error('[getGenresWithCounts:events]', upError.message)
+  const upcomingSet = new Set((upcomingRows ?? []).map((e) => e.id as string))
+
+  // Count distinct upcoming events per genre
+  const genreCounts = new Map<number, number>()
+  for (const [gid, eventIds] of genreEventMap) {
+    let count = 0
+    for (const eid of eventIds) if (upcomingSet.has(eid)) count++
+    genreCounts.set(gid, count)
+  }
+
+  return genres.map((g) => ({ ...g, upcoming_count: genreCounts.get(g.id) ?? 0 }))
 }

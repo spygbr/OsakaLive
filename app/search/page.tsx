@@ -6,7 +6,7 @@ import { ChevronRight } from "lucide-react";
 import {
   getFilteredEvents,
   getAreas,
-  getGenres,
+  getGenresWithCounts,
   type FilterParams,
 } from "@/lib/supabase/queries";
 import {
@@ -53,7 +53,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
   const [events, areas, genres] = await Promise.all([
     getFilteredEvents(filters, 50),
     getAreas(),
-    getGenres(),
+    getGenresWithCounts(),
   ]);
 
   const hasFilters = Object.values(filters).some(Boolean);

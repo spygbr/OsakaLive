@@ -28,6 +28,7 @@
  *   npx tsx scripts/enrich-artists.ts --bio-min-len 120  # floor for bio quality
  *   npx tsx scripts/enrich-artists.ts --translate-bios   # translate missing lang via Haiku
  *   npx tsx scripts/enrich-artists.ts --include-site-fallback  # scrape artist website
+ *   npx tsx scripts/enrich-artists.ts --genre-only     # only refresh genre_id (skip img/bio/IG)
  *   npx tsx scripts/enrich-artists.ts --force         # re-enrich all columns
  *   npx tsx scripts/enrich-artists.ts --sources deezer,spotify,wikipedia
  *   npx tsx scripts/enrich-artists.ts --threshold 0.65
@@ -641,7 +642,7 @@ async function searchDiscogs(artist: Artist): Promise<RawCandidate[]> {
       )
       if (!searchRes.ok) { await sleep(delay); continue }
       const searchJson = await searchRes.json() as {
-        results?: { id: number; title: string; type: string }[]
+        results?: { id: number; title: string; type: string; genre?: string[]; style?: string[] }[]
       }
       for (const r of (searchJson.results ?? []).filter((x) => x.type === 'artist')) {
         if (seen.has(r.id)) continue
@@ -659,6 +660,8 @@ async function searchDiscogs(artist: Artist): Promise<RawCandidate[]> {
             profile?: string
             images?: { uri: string; type: 'primary' | 'secondary'; width?: number; height?: number }[]
             urls?: string[]
+            // Discogs artist detail includes releases_url but not genres/styles directly.
+            // genres/styles come from the search result, not the artist endpoint.
           }
           const imgs = detail.images ?? []
           const primary = imgs.find((i) => i.type === 'primary') ?? imgs[0]
@@ -667,6 +670,8 @@ async function searchDiscogs(artist: Artist): Promise<RawCandidate[]> {
           const websiteUrl = detail.urls?.find(
             (u) => !/(facebook|twitter|instagram|myspace|last\.fm|allmusic)/i.test(u),
           )
+          // genres/styles from the Discogs search result row
+          const discogsGenreTags: string[] = [...(r.genre ?? []), ...(r.style ?? [])]
           out.push({
             sourceId:  String(r.id),
             sourceUrl: `https://www.discogs.com/artist/${r.id}`,
@@ -676,6 +681,7 @@ async function searchDiscogs(artist: Artist): Promise<RawCandidate[]> {
             notes: primary.type === 'secondary' ? 'secondary image' : undefined,
             websiteUrl,
             bioEn: detail.profile || undefined,
+            genreTags: discogsGenreTags.length ? discogsGenreTags : undefined,
           })
         } catch { /* swallow detail */ }
       }
@@ -756,16 +762,27 @@ async function searchMusicBrainz(artist: Artist): Promise<RawCandidate[]> {
       for (const a of json.artists ?? []) {
         if (scoreName(artist, a.name) === 0) continue
 
-        // Fetch full artist record with annotation
+        // Fetch full artist record with annotation + tags
         let bioEn: string | undefined
+        let mbGenreTags: string[] = []
         try {
           const detailRes = await fetch(
-            `https://musicbrainz.org/ws/2/artist/${a.id}?fmt=json&inc=annotation`,
+            `https://musicbrainz.org/ws/2/artist/${a.id}?fmt=json&inc=annotation+tags`,
             { headers: { 'User-Agent': OL_UA, Accept: 'application/json' }, signal: AbortSignal.timeout(10_000) },
           )
           if (detailRes.ok) {
-            const detail = await detailRes.json() as { annotation?: { text?: string } }
+            const detail = await detailRes.json() as {
+              annotation?: { text?: string }
+              tags?: { name: string; count: number }[]
+            }
             if (detail.annotation?.text) bioEn = detail.annotation.text
+            // Use top-3 tags by vote count
+            if (detail.tags?.length) {
+              mbGenreTags = detail.tags
+                .sort((a, b) => b.count - a.count)
+                .slice(0, 3)
+                .map((t) => t.name)
+            }
           }
         } catch { /* ignore */ }
         await sleep(1100)
@@ -773,16 +790,19 @@ async function searchMusicBrainz(artist: Artist): Promise<RawCandidate[]> {
         const coverUrl = `https://coverartarchive.org/artist/${a.id}/front-500`
         try {
           const head = await fetch(coverUrl, { method: 'HEAD', headers: { 'User-Agent': OL_UA }, signal: AbortSignal.timeout(8_000) })
+          const mbGenreTagsArg = mbGenreTags.length ? mbGenreTags : undefined
           if (head.ok) out.push({
             sourceId: a.id, sourceUrl: `https://musicbrainz.org/artist/${a.id}`,
-            imageUrl: coverUrl, matchName: a.name, notes: a.country ?? undefined, bioEn,
+            imageUrl: coverUrl, matchName: a.name, notes: a.country ?? undefined,
+            bioEn, genreTags: mbGenreTagsArg,
           })
-          else if (bioEn) {
-            // No cover art but we have a bio — add a placeholder candidate
-            // (won't contribute to image scoring but bio is captured via pool)
+          else if (bioEn || mbGenreTags.length) {
+            // No cover art but we have bio/tags — add a placeholder candidate
+            // (won't contribute to image scoring but data is captured via pool)
             out.push({
               sourceId: a.id, sourceUrl: `https://musicbrainz.org/artist/${a.id}`,
-              imageUrl: '', matchName: a.name, notes: 'annotation only', bioEn,
+              imageUrl: '', matchName: a.name, notes: 'annotation/tags only',
+              bioEn, genreTags: mbGenreTagsArg,
             })
           }
         } catch { /* no cover art */ }
@@ -1077,7 +1097,7 @@ async function processArtist(artist: Artist): Promise<ReportRow> {
   }
 
   // ── Step 3b: Bio extraction ──────────────────────────────────────────────────
-  if (!SKIP_BIO && (!artist.bio_en || !artist.bio_ja || FORCE)) {
+  if (!SKIP_BIO && !GENRE_ONLY && (!artist.bio_en || !artist.bio_ja || FORCE)) {
     const bioCandidates: BioCandidate[] = []
     for (const [src, cands] of pool) {
       for (const c of cands) {
@@ -1163,7 +1183,7 @@ Biography: ${picked.en.slice(0, 800)}`,
   let winner: ScoredCandidate | null = null
   let verdict: ReportRow['verdict'] = 'miss'
 
-  if (!SKIP_IMAGE && !artist.image_url) {
+  if (!SKIP_IMAGE && !GENRE_ONLY && !artist.image_url) {
     const qualified = scored.filter((c) => c.finalScore >= THRESHOLD)
     if (qualified.length) {
       winner = qualified[0]
@@ -1196,7 +1216,7 @@ Biography: ${picked.en.slice(0, 800)}`,
   }
 
   // ── Step 5: LLM instagram fallback ──────────────────────────────────────────
-  if (!SKIP_LLM && !artist.instagram_url && !updates.instagram_url) {
+  if (!SKIP_LLM && !GENRE_ONLY && !artist.instagram_url && !updates.instagram_url) {
     const apiKey = process.env.ANTHROPIC_API_KEY
     if (apiKey) {
       const igUrl = DRY_RUN
@@ -1242,6 +1262,9 @@ async function main(): Promise<void> {
 
   if (SLUGS?.length) {
     query = query.in('slug', SLUGS)
+  } else if (GENRE_ONLY) {
+    // Only artists missing genre_id
+    query = query.is('genre_id', null)
   } else if (BIO_ONLY) {
     // Only artists missing at least one bio column
     query = query.or('bio_en.is.null,bio_ja.is.null')
@@ -1264,6 +1287,7 @@ async function main(): Promise<void> {
     (SKIP_IMAGE          ? ' [skip-image]'        : '') +
     (SKIP_BIO            ? ' [skip-bio]'          : '') +
     (BIO_ONLY            ? ' [bio-only]'          : '') +
+    (GENRE_ONLY          ? ' [genre-only]'        : '') +
     (TRANSLATE_BIOS      ? ' [translate-bios]'    : '') +
     (INCLUDE_SITE_FALLBACK ? ' [site-fallback]'   : '') +
     (NO_UPLOAD           ? ' [no-upload]'         : '') +
