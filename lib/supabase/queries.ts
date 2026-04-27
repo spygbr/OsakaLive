@@ -135,6 +135,76 @@ const EVENT_SELECT_FULL = `
 `
 
 // ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+type ResolvedFilterIds = {
+  venueIds: string[] | null
+  genreEventIds: string[] | null
+  /** true = the filter matched nothing — caller should return [] immediately */
+  empty: boolean
+}
+
+/**
+ * Resolves area and genre filter slugs to the concrete ID sets needed for
+ * the main event query. Extracted to avoid duplicating ~60 lines of
+ * sequential sub-queries across getFilteredEvents and getEventsForMonth.
+ */
+async function resolveFilterIds(
+  supabase: ReturnType<typeof createServerClient>,
+  filters: Pick<FilterParams, 'area' | 'genre'>,
+): Promise<ResolvedFilterIds> {
+  // Area slug → venue IDs
+  let venueIds: string[] | null = null
+  if (filters.area) {
+    const { data: areaRow, error: areaErr } = await supabase
+      .from('areas')
+      .select('id')
+      .eq('slug', filters.area)
+      .maybeSingle()
+    if (areaErr) throw new Error(`[resolveFilterIds:area] ${areaErr.message}`)
+    if (areaRow) {
+      const { data: venueRows, error: venueErr } = await supabase
+        .from('venues')
+        .select('id')
+        .eq('area_id', areaRow.id)
+      if (venueErr) throw new Error(`[resolveFilterIds:venues] ${venueErr.message}`)
+      venueIds = (venueRows ?? []).map((v) => v.id)
+      if (venueIds.length === 0) return { venueIds: null, genreEventIds: null, empty: true }
+    }
+  }
+
+  // Genre slug → event IDs (via artist → genre → event_artists)
+  let genreEventIds: string[] | null = null
+  if (filters.genre) {
+    const { data: genreRow, error: genreErr } = await supabase
+      .from('genres')
+      .select('id')
+      .eq('slug', filters.genre)
+      .maybeSingle()
+    if (genreErr) throw new Error(`[resolveFilterIds:genre] ${genreErr.message}`)
+    if (genreRow) {
+      const { data: artistRows, error: artistErr } = await supabase
+        .from('artists')
+        .select('id')
+        .eq('genre_id', genreRow.id)
+      if (artistErr) throw new Error(`[resolveFilterIds:artists] ${artistErr.message}`)
+      const artistIds = (artistRows ?? []).map((a) => a.id as string)
+      if (artistIds.length === 0) return { venueIds, genreEventIds: null, empty: true }
+      const { data: eaRows, error: eaErr } = await supabase
+        .from('event_artists')
+        .select('event_id')
+        .in('artist_id', artistIds)
+      if (eaErr) throw new Error(`[resolveFilterIds:event_artists] ${eaErr.message}`)
+      genreEventIds = Array.from(new Set((eaRows ?? []).map((ea) => ea.event_id as string)))
+      if (genreEventIds.length === 0) return { venueIds, genreEventIds: null, empty: true }
+    }
+  }
+
+  return { venueIds, genreEventIds, empty: false }
+}
+
+// ---------------------------------------------------------------------------
 // Queries
 // ---------------------------------------------------------------------------
 
@@ -208,47 +278,8 @@ export async function getFilteredEvents(
   const today = getTodayJST()
   const dateFrom = filters.dateFrom ?? today
 
-  // Resolve optional venue IDs (area filter)
-  let venueIds: string[] | null = null
-  if (filters.area) {
-    const { data: areaRow } = await supabase
-      .from('areas')
-      .select('id')
-      .eq('slug', filters.area)
-      .maybeSingle()
-    if (areaRow) {
-      const { data: venueRows } = await supabase
-        .from('venues')
-        .select('id')
-        .eq('area_id', areaRow.id)
-      venueIds = (venueRows ?? []).map((v) => v.id)
-      if (venueIds.length === 0) return [] // area exists but has no venues
-    }
-  }
-
-  // Resolve optional event IDs (genre filter — via artist→genre→event)
-  let genreEventIds: string[] | null = null
-  if (filters.genre) {
-    const { data: genreRow } = await supabase
-      .from('genres')
-      .select('id')
-      .eq('slug', filters.genre)
-      .maybeSingle()
-    if (genreRow) {
-      const { data: artistRows } = await supabase
-        .from('artists')
-        .select('id')
-        .eq('genre_id', genreRow.id)
-      const artistIds = (artistRows ?? []).map((a) => a.id as string)
-      if (artistIds.length === 0) return []
-      const { data: eaRows } = await supabase
-        .from('event_artists')
-        .select('event_id')
-        .in('artist_id', artistIds)
-      genreEventIds = Array.from(new Set((eaRows ?? []).map((ea) => ea.event_id as string)))
-      if (genreEventIds.length === 0) return []
-    }
-  }
+  const { venueIds, genreEventIds, empty } = await resolveFilterIds(supabase, filters)
+  if (empty) return []
 
   // Build main query
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -320,47 +351,8 @@ export async function getEventsForMonth(
   const lastDay = new Date(year, month, 0).getDate() // month is 1-indexed here
   const end = `${year}-${mm}-${String(lastDay).padStart(2, '0')}`
 
-  // Resolve optional venue IDs (area filter)
-  let venueIds: string[] | null = null
-  if (filters.area) {
-    const { data: areaRow } = await supabase
-      .from('areas')
-      .select('id')
-      .eq('slug', filters.area)
-      .maybeSingle()
-    if (areaRow) {
-      const { data: venueRows } = await supabase
-        .from('venues')
-        .select('id')
-        .eq('area_id', areaRow.id)
-      venueIds = (venueRows ?? []).map((v) => v.id)
-      if (venueIds.length === 0) return []
-    }
-  }
-
-  // Resolve optional event IDs (genre filter — via artist→genre→event)
-  let genreEventIds: string[] | null = null
-  if (filters.genre) {
-    const { data: genreRow } = await supabase
-      .from('genres')
-      .select('id')
-      .eq('slug', filters.genre)
-      .maybeSingle()
-    if (genreRow) {
-      const { data: artistRows } = await supabase
-        .from('artists')
-        .select('id')
-        .eq('genre_id', genreRow.id)
-      const artistIds = (artistRows ?? []).map((a) => a.id as string)
-      if (artistIds.length === 0) return []
-      const { data: eaRows } = await supabase
-        .from('event_artists')
-        .select('event_id')
-        .in('artist_id', artistIds)
-      genreEventIds = Array.from(new Set((eaRows ?? []).map((ea) => ea.event_id as string)))
-      if (genreEventIds.length === 0) return []
-    }
-  }
+  const { venueIds, genreEventIds, empty } = await resolveFilterIds(supabase, filters)
+  if (empty) return []
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let query: any = supabase

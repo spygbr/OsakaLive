@@ -1,11 +1,4 @@
-import type { Metadata } from "next";
 import { Sidebar } from "@/components/Sidebar";
-
-export const metadata: Metadata = {
-  title: "Live Music Calendar | Upcoming Shows in Osaka",
-  description: "Browse upcoming live music events in Osaka by date. Punk, metal, jazz, electronic and more at Namba, Shinsaibashi & Osaka livehouses.",
-  alternates: { canonical: "https://osaka-live.net/calendar" },
-};
 import { CalendarDesktop } from "@/components/CalendarDesktop";
 import { CalendarMobile } from "@/components/CalendarMobile";
 import { ChevronLeft, ChevronRight } from "lucide-react";
