@@ -28,9 +28,8 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const result = await getArtistBySlug(slug);
-  if (!result) return {};
-  const { artist } = result;
+  const artist = await getArtistBySlug(slug);
+  if (!artist) return {};
   const genre = artist.genre?.name_en ?? "music";
   const desc = artist.bio_en
     ? artist.bio_en.slice(0, 155)

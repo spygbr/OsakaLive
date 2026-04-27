@@ -49,6 +49,16 @@ export const metadata: Metadata = {
   publisher: "Osaka Live",
   robots: { index: true, follow: true },
   alternates: { canonical: BASE_URL },
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon-16x16.png", type: "image/png", sizes: "16x16" },
+      { url: "/favicon-32x32.png", type: "image/png", sizes: "32x32" },
+      { url: "/favicon-48x48.png", type: "image/png", sizes: "48x48" },
+      { url: "/favicon-96x96.png", type: "image/png", sizes: "96x96" },
+    ],
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180" }],
+  },
   openGraph: {
     type: "website",
     locale: "en_US",
@@ -58,13 +68,13 @@ export const metadata: Metadata = {
     title: "Osaka Live House Guide | Underground Music Events & Venues",
     description:
       "Discover underground live music in Osaka — punk, metal, jazz, electronic & more. Upcoming shows, ticket info, and venue guide.",
-    images: [{ url: "/icons/icon-512.png", width: 512, height: 512, alt: "Osaka Live" }],
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "Osaka Live House Guide" }],
   },
   twitter: {
     card: "summary_large_image",
     title: "Osaka Live House Guide",
     description: "Underground live music in Osaka — upcoming shows, venues & tickets.",
-    images: ["/icons/icon-512.png"],
+    images: ["/og-image.png"],
   },
   themeColor: "#f2ca50",
 };
