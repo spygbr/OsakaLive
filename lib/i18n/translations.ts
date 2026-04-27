@@ -37,6 +37,7 @@ export const translations = {
   search_noMatch:          { en: 'NO EVENTS MATCH THE CURRENT FILTERS.', ja: '条件に一致するイベントはありません。' },
   search_noEvents:         { en: 'No upcoming events found.', ja: '今後のイベントは見つかりませんでした。' },
   search_clearFilters:     { en: 'CLEAR FILTERS →',           ja: 'フィルターをクリア →' },
+  search_genreSparse:      { en: 'FEW ARTISTS ARE TAGGED WITH THIS GENRE YET — TRY REMOVING THE GENRE FILTER OR BROWSE THE FULL LIST.', ja: 'このジャンルはまだタグ付けされたアーティストが少ないです。ジャンルフィルターを外すか、全一覧をご覧ください。' },
   search_viewDetails:      { en: 'VIEW DETAILS',              ja: '詳細を見る' },
   search_liveHouse:        { en: 'LIVE HOUSE',                ja: 'ライブハウス' },
 

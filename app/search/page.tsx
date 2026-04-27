@@ -109,6 +109,11 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
             <p className="text-outline font-mono text-sm uppercase tracking-widest">
               {hasFilters ? t('search_noMatch') : t('search_noEvents')}
             </p>
+            {hasFilters && filters.genre && genres.find(g => g.slug === filters.genre)?.upcoming_count === 0 && (
+              <p className="mt-3 font-mono text-[10px] uppercase tracking-widest text-outline max-w-sm mx-auto">
+                {t('search_genreSparse')}
+              </p>
+            )}
             {hasFilters && (
               <Link
                 href="/search"
