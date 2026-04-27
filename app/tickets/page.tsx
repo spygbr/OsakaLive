@@ -1,4 +1,11 @@
+import type { Metadata } from "next";
 import { Sidebar } from "@/components/Sidebar";
+
+export const metadata: Metadata = {
+  title: "How to Buy Concert Tickets in Osaka | Osaka Live",
+  description: "Step-by-step guide to buying live music tickets in Osaka — e+, pia, lawson, and door tickets explained for English speakers.",
+  alternates: { canonical: "https://osaka-live.net/tickets" },
+};
 import Image from "next/image";
 import Link from "next/link";
 import { ChevronRight, QrCode, Calendar, MapPin } from "lucide-react";

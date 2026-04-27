@@ -1,4 +1,12 @@
+import type { Metadata } from "next";
 import { Sidebar } from "@/components/Sidebar";
+
+export const metadata: Metadata = {
+  title: "Search Events | Osaka Live",
+  description: "Search live music events in Osaka by genre, venue, date, and more.",
+  alternates: { canonical: "https://osaka-live.net/search" },
+  robots: { index: false, follow: true },
+};
 import { SearchFilterChips } from "@/components/SearchFilterChips";
 import Image from "next/image";
 import Link from "next/link";

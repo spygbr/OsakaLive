@@ -1,4 +1,11 @@
+import type { Metadata } from "next";
 import { Sidebar } from "@/components/Sidebar";
+
+export const metadata: Metadata = {
+  title: "Artists | Osaka Underground Music Scene",
+  description: "Discover artists playing live in Osaka's underground livehouse scene — punk, metal, jazz, electronic and more.",
+  alternates: { canonical: "https://osaka-live.net/artists" },
+};
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { getAllArtists } from "@/lib/supabase/queries";
