@@ -149,6 +149,7 @@ export function Sidebar({ areas = [], genres = [] }: SidebarProps) {
           </div>
           {genres.some((g) => g.upcoming_count === 0) && (
             <button
+              data-testid="genre-show-all"
               onClick={() => setShowAllGenres((v) => !v)}
               className="text-[9px] font-mono text-outline hover:text-primary transition-colors uppercase"
             >
@@ -158,6 +159,7 @@ export function Sidebar({ areas = [], genres = [] }: SidebarProps) {
         </div>
         <div className="grid grid-cols-2 gap-px bg-outline-variant border-y border-outline-variant">
           <button
+            data-testid="genre-all-btn"
             onClick={() => setParam({ genre: null })}
             className={`p-2 text-[10px] font-bold uppercase transition-colors ${
               !genre
@@ -172,6 +174,8 @@ export function Sidebar({ areas = [], genres = [] }: SidebarProps) {
             .map((g) => (
               <button
                 key={g.slug}
+                data-testid="genre-btn"
+                data-slug={g.slug}
                 onClick={() =>
                   setParam({ genre: genre === g.slug ? null : g.slug })
                 }

@@ -189,6 +189,7 @@ export function MobileFilterDrawer({
                 </div>
                 <div className="grid grid-cols-2 gap-px bg-outline-variant border-y border-outline-variant mx-4">
                   <button
+                    data-testid="genre-all-btn"
                     onClick={() => setParam({ genre: null })}
                     className={`p-2 text-[10px] font-bold uppercase transition-colors ${
                       !genre
@@ -203,6 +204,8 @@ export function MobileFilterDrawer({
                     .map((g) => (
                       <button
                         key={g.slug}
+                        data-testid="genre-btn"
+                        data-slug={g.slug}
                         onClick={() =>
                           setParam({ genre: genre === g.slug ? null : g.slug })
                         }
