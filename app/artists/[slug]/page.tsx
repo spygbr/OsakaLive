@@ -57,8 +57,24 @@ export default async function ArtistDetailPage({
 
   const { upcomingEvents } = artist;
 
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "MusicGroup",
+    name: artist.name_en,
+    ...(artist.name_ja && { alternateName: artist.name_ja }),
+    ...(artist.genre?.name_en && { genre: artist.genre.name_en }),
+    ...(artist.bio_en && { description: artist.bio_en }),
+    url: `https://osaka-live.net/artists/${artist.slug}`,
+    ...(artist.image_url && { image: artist.image_url }),
+    sameAs: [artist.website_url, artist.instagram_url].filter(Boolean),
+  };
+
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       <Sidebar />
       <main className="flex-1 bg-surface-dim pb-20 md:pb-0 overflow-x-hidden">
 
