@@ -60,7 +60,8 @@ type Confidence = 'high' | 'medium' | 'low' | 'discard'
 
 interface CandidateRow {
   raw_name:          string
-  source:            'title' | 'description'
+  // 'title_fallback': stripped title used as lineup fallback (no lineup found, single-act title)
+  source:            'title' | 'description' | 'title_fallback'
   confidence:        Confidence
   confidence_reason: string
   event_id:          string
@@ -461,6 +462,22 @@ function normaliseToken(raw: string): string {
   return t
 }
 
+/**
+ * True if the stripped title could be a single artist name.
+ * Rejects: commas, spaced slashes (act separators), ×, vs, double-spaces,
+ * Japanese particles in the middle, and anything too short or too long.
+ */
+function looksLikeSingleAct(stripped: string): boolean {
+  if (stripped.length < 3 || stripped.length > 35)   return false
+  if (/[,，]/.test(stripped))                         return false
+  if (/\s+[/／]\s+/.test(stripped))                  return false
+  if (/\bvs\.?\b/i.test(stripped))                   return false
+  if (/×/.test(stripped))                             return false
+  if (/\s{2,}/.test(stripped))                       return false
+  if (/[のはをがでにへと].+/.test(stripped))          return false
+  return true
+}
+
 // ── Description extraction ─────────────────────────────────────────────────────
 
 /**
@@ -561,7 +578,7 @@ async function main() {
   // ── 3. First pass: collect all raw candidates (before frequency counting) ──
   interface RawCandidate {
     raw_name: string
-    source:   'title' | 'description'
+    source:   'title' | 'description' | 'title_fallback'
     event_id: string
   }
   const rawCandidates: RawCandidate[] = []
@@ -616,6 +633,27 @@ async function main() {
       }
     }
   }
+
+  // ── 3b. Title fallback for events with no description/lineup candidates ──────
+  // When the scraper found no performers in lineup/description, and the stripped
+  // title looks like a single act, emit it as a 'title_fallback' candidate.
+  // This covers category (b) from the audit: one-act events whose title IS the artist.
+  const eventsWithDescCandidates = new Set(
+    rawCandidates.filter(c => c.source === 'description').map(c => c.event_id),
+  )
+  let titleFallbackCount = 0
+  for (const event of events) {
+    if (eventsWithDescCandidates.has(event.id)) continue
+    const title = (event.title_raw as string | null)?.trim() ?? ''
+    if (!title) continue
+    const stripped = stripTitleNoise(title)
+    if (!looksLikeSingleAct(stripped)) continue
+    // Also skip if the stripped title still shows noise (tour, release, etc.)
+    if (titleHasNoise(stripped)) continue
+    rawCandidates.push({ raw_name: stripped, source: 'title_fallback', event_id: event.id })
+    titleFallbackCount++
+  }
+  if (titleFallbackCount) console.log(`🎯  Title fallback: ${titleFallbackCount} single-act events with no lineup data`)
 
   // ── 4. Count distinct events per normalised name ───────────────────────────
   // normalise: lowercase + collapse whitespace
@@ -683,6 +721,17 @@ async function main() {
       finalRows.push({ ...c, confidence: 'discard', confidence_reason: 'tour/event descriptor' })
       continue
     }
+    if (c.source === 'title_fallback') {
+      // Title used as lineup fallback — already validated as single-act, skip noise check.
+      // Floor confidence at 'medium' (we know there's no competing lineup data).
+      const scored = scoreToken(c.raw_name, eventCount, existingArtists)
+      const confidence: Confidence = scored.confidence === 'high' ? 'high'
+        : scored.confidence === 'discard' ? 'low'
+        : 'medium'
+      finalRows.push({ ...c, confidence, confidence_reason: `title fallback (no lineup); ${scored.reason}` })
+      continue
+    }
+
     if (c.source === 'title' && titleHasNoise(c.raw_name)) {
       // Title still has noise in the ORIGINAL (not stripped) form — low confidence
       const scored = scoreToken(c.raw_name, eventCount, existingArtists)
