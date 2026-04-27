@@ -19,23 +19,39 @@ export function formatPrice(p: number | null | undefined): string {
   return `¥${p.toLocaleString()}`
 }
 
-/** "2026-04-09" → "2026.04.09 (THU)" */
-export function formatEventDate(d: string): string {
-  const date = new Date(d + 'T00:00:00+09:00')
-  const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${y}.${m}.${day} (${days[date.getDay()]})`
+/**
+ * Parse a YYYY-MM-DD string into a UTC Date, avoiding any local-timezone shift.
+ * new Date("2026-04-25T00:00:00+09:00") becomes 2026-04-24T15:00Z in UTC, so
+ * getDate()/getDay() on a UTC server return the wrong day. Date.UTC avoids that.
+ */
+function parseDateUTC(d: string): Date {
+  const [y, m, day] = d.split('-').map(Number)
+  return new Date(Date.UTC(y, m - 1, day))
 }
 
-/** "2026-04-09" → "12 / 04 (THU)" short form for sidebar cards */
-export function formatEventDateShort(d: string): string {
-  const date = new Date(d + 'T00:00:00+09:00')
+/** "2026-04-09" → "2026.04.09 (THU)" */
+export function formatEventDate(d: string): string {
+  const date = parseDateUTC(d)
   const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
-  const m = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${day} / ${m} (${days[date.getDay()]})`
+  const y = date.getUTCFullYear()
+  const m = String(date.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(date.getUTCDate()).padStart(2, '0')
+  return `${y}.${m}.${day} (${days[date.getUTCDay()]})`
+}
+
+/** "2026-04-09" → "09 / 04 (THU)" short form for sidebar cards */
+export function formatEventDateShort(d: string): string {
+  const date = parseDateUTC(d)
+  const days = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
+  const m = String(date.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(date.getUTCDate()).padStart(2, '0')
+  return `${day} / ${m} (${days[date.getUTCDay()]})`
+}
+
+/** "2026-04-09" → "Apr" (month abbreviation, timezone-safe) */
+export function formatEventMonth(d: string): string {
+  const date = parseDateUTC(d)
+  return date.toLocaleDateString('en', { month: 'short', timeZone: 'UTC' })
 }
 
 /** Availability badge label */

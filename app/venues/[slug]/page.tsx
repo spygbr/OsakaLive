@@ -9,6 +9,7 @@ import {
   formatEventDate,
   formatTime,
   formatPrice,
+  formatEventMonth,
   availLabel,
   availClasses,
 } from "@/lib/utils";
@@ -199,9 +200,7 @@ export default async function VenueDetailPage({
                         {event.event_date.slice(8)}
                       </p>
                       <p className="font-mono text-[9px] text-outline uppercase mt-0.5">
-                        {new Date(event.event_date + "T00:00:00+09:00")
-                          .toLocaleDateString("en", { month: "short" })
-                          .toUpperCase()}
+                        {formatEventMonth(event.event_date).toUpperCase()}
                       </p>
                     </div>
 
