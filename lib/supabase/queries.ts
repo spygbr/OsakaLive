@@ -149,7 +149,7 @@ export async function getFeaturedEvents(limit = 3): Promise<EventWithVenue[]> {
     .gte('event_date', today)
     .order('event_date', { ascending: true })
     .limit(limit)
-  if (error) console.error('[getFeaturedEvents]', error.message)
+  if (error) throw new Error(`[getFeaturedEvents] ${error.message}`)
   return normalizeEvents(data ?? [])
 }
 
@@ -163,7 +163,7 @@ export async function getTonightEvents(limit = 10): Promise<EventWithVenue[]> {
     .eq('event_date', today)
     .order('start_time', { ascending: true })
     .limit(limit)
-  if (error) console.error('[getTonightEvents]', error.message)
+  if (error) throw new Error(`[getTonightEvents] ${error.message}`)
   return normalizeEvents(data ?? [])
 }
 
@@ -177,7 +177,7 @@ export async function getUpcomingEvents(limit = 5): Promise<EventWithVenue[]> {
     .gt('event_date', today)
     .order('event_date', { ascending: true })
     .limit(limit)
-  if (error) console.error('[getUpcomingEvents]', error.message)
+  if (error) throw new Error(`[getUpcomingEvents] ${error.message}`)
   return normalizeEvents(data ?? [])
 }
 
@@ -191,7 +191,7 @@ export async function getAllUpcomingEvents(limit = 50, offset = 0): Promise<Even
     .gte('event_date', today)
     .order('event_date', { ascending: true })
     .range(offset, offset + limit - 1)
-  if (error) console.error('[getAllUpcomingEvents]', error.message)
+  if (error) throw new Error(`[getAllUpcomingEvents] ${error.message}`)
   return normalizeEvents(data ?? [])
 }
 
@@ -282,7 +282,7 @@ export async function getFilteredEvents(
   }
 
   const { data, error } = await query
-  if (error) console.error('[getFilteredEvents]', error.message)
+  if (error) throw new Error(`[getFilteredEvents] ${error.message}`)
   return normalizeEvents(data ?? [])
 }
 
@@ -294,7 +294,7 @@ export async function getEventBySlug(slug: string): Promise<EventWithVenue | nul
     .select(EVENT_SELECT_FULL)
     .eq('slug', slug)
     .maybeSingle()
-  if (error) console.error('[getEventBySlug]', error.message)
+  if (error) throw new Error(`[getEventBySlug] ${error.message}`)
   return data ? normalizeEvent(data) : null
 }
 
@@ -302,7 +302,7 @@ export async function getEventBySlug(slug: string): Promise<EventWithVenue | nul
 export async function getAllEventSlugs(): Promise<string[]> {
   const supabase = createServerClient()
   const { data, error } = await supabase.from('events').select('slug')
-  if (error) console.error('[getAllEventSlugs]', error.message)
+  if (error) throw new Error(`[getAllEventSlugs] ${error.message}`)
   return (data ?? []).map((e) => e.slug).filter((s): s is string => s !== null)
 }
 
@@ -376,7 +376,7 @@ export async function getEventsForMonth(
   if (genreEventIds !== null) query = query.in('id', genreEventIds)
 
   const { data, error } = await query
-  if (error) console.error('[getEventsForMonth]', error.message)
+  if (error) throw new Error(`[getEventsForMonth] ${error.message}`)
   return normalizeEvents(data ?? [])
 }
 
@@ -387,7 +387,7 @@ export async function getAllArtists(): Promise<ArtistWithGenre[]> {
     .from('artists')
     .select('*, genre:genres(name_en, slug)')
     .order('name_en', { ascending: true })
-  if (error) console.error('[getAllArtists]', error.message)
+  if (error) throw new Error(`[getAllArtists] ${error.message}`)
   return (data ?? []) as ArtistWithGenre[]
 }
 
@@ -398,7 +398,7 @@ export async function getAllVenues() {
     .from('venues')
     .select('*, area:areas(name_en, name_ja, slug)')
     .order('name_en', { ascending: true })
-  if (error) console.error('[getAllVenues]', error.message)
+  if (error) throw new Error(`[getAllVenues] ${error.message}`)
   return data ?? []
 }
 
@@ -412,7 +412,7 @@ export async function getArtistBySlug(slug: string) {
     .select('*, genre:genres(name_en, slug)')
     .eq('slug', slug)
     .maybeSingle()
-  if (artistError) console.error('[getArtistBySlug]', artistError.message)
+  if (artistError) throw new Error(`[getArtistBySlug] ${artistError.message}`)
   if (!artist) return null
 
   // Fetch upcoming events this artist is billed on
@@ -420,7 +420,7 @@ export async function getArtistBySlug(slug: string) {
     .from('event_artists')
     .select(`event:events(*, venue:venues(id, name_en, name_ja, slug, address_en, website_url, area:areas(name_en, name_ja, slug)))`)
     .eq('artist_id', artist.id)
-  if (evError) console.error('[getArtistBySlug:events]', evError.message)
+  if (evError) throw new Error(`[getArtistBySlug:events] ${evError.message}`)
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const upcomingEvents: EventWithVenue[] = (eventArtistRows ?? [])
@@ -438,7 +438,7 @@ export async function getArtistBySlug(slug: string) {
 export async function getAllArtistSlugs(): Promise<string[]> {
   const supabase = createServerClient()
   const { data, error } = await supabase.from('artists').select('slug')
-  if (error) console.error('[getAllArtistSlugs]', error.message)
+  if (error) throw new Error(`[getAllArtistSlugs] ${error.message}`)
   return (data ?? []).map((a) => a.slug)
 }
 
@@ -452,7 +452,7 @@ export async function getVenueBySlug(slug: string) {
     .select('*, area:areas(name_en, name_ja, slug)')
     .eq('slug', slug)
     .maybeSingle()
-  if (venueError) console.error('[getVenueBySlug]', venueError.message)
+  if (venueError) throw new Error(`[getVenueBySlug] ${venueError.message}`)
   if (!venue) return null
 
   const { data: events, error: evError } = await supabase
@@ -461,7 +461,7 @@ export async function getVenueBySlug(slug: string) {
     .eq('venue_id', venue.id)
     .gte('event_date', today)
     .order('event_date', { ascending: true })
-  if (evError) console.error('[getVenueBySlug:events]', evError.message)
+  if (evError) throw new Error(`[getVenueBySlug:events] ${evError.message}`)
 
   return { ...venue, upcomingEvents: normalizeEvents(events ?? []) }
 }
@@ -470,7 +470,7 @@ export async function getVenueBySlug(slug: string) {
 export async function getAllVenueSlugs(): Promise<string[]> {
   const supabase = createServerClient()
   const { data, error } = await supabase.from('venues').select('slug')
-  if (error) console.error('[getAllVenueSlugs]', error.message)
+  if (error) throw new Error(`[getAllVenueSlugs] ${error.message}`)
   return (data ?? []).map((v) => v.slug)
 }
 
@@ -481,7 +481,7 @@ export async function getAreas(): Promise<AreaOption[]> {
     .from('areas')
     .select('id, name_en, name_ja, slug')
     .order('name_en', { ascending: true })
-  if (error) console.error('[getAreas]', error.message)
+  if (error) throw new Error(`[getAreas] ${error.message}`)
   return (data ?? []) as AreaOption[]
 }
 
@@ -492,7 +492,7 @@ export async function getGenres(): Promise<GenreOption[]> {
     .from('genres')
     .select('id, name_en, slug')
     .order('name_en', { ascending: true })
-  if (error) console.error('[getGenres]', error.message)
+  if (error) throw new Error(`[getGenres] ${error.message}`)
   return (data ?? []) as GenreOption[]
 }
 
@@ -511,7 +511,7 @@ export async function getGenresWithCounts(): Promise<GenreOptionWithCount[]> {
     supabase.from('artists').select('id, genre_id').not('genre_id', 'is', null),
   ])
 
-  if (genresRes.error) console.error('[getGenresWithCounts:genres]', genresRes.error.message)
+  if (genresRes.error) throw new Error(`[getGenresWithCounts:genres] ${genresRes.error.message}`)
   const genres = (genresRes.data ?? []) as GenreOption[]
   const artistsWithGenre = (artistsRes.data ?? []) as { id: string; genre_id: number }[]
 
@@ -525,7 +525,7 @@ export async function getGenresWithCounts(): Promise<GenreOptionWithCount[]> {
     .from('event_artists')
     .select('event_id, artist_id')
     .in('artist_id', artistIds)
-  if (eaError) console.error('[getGenresWithCounts:event_artists]', eaError.message)
+  if (eaError) throw new Error(`[getGenresWithCounts:event_artists] ${eaError.message}`)
 
   // Build genre_id → Set<event_id>
   const genreEventMap = new Map<number, Set<string>>()
@@ -545,7 +545,7 @@ export async function getGenresWithCounts(): Promise<GenreOptionWithCount[]> {
     .select('id')
     .in('id', allEventIds)
     .gte('event_date', today)
-  if (upError) console.error('[getGenresWithCounts:events]', upError.message)
+  if (upError) throw new Error(`[getGenresWithCounts:events] ${upError.message}`)
   const upcomingSet = new Set((upcomingRows ?? []).map((e) => e.id as string))
 
   // Count distinct upcoming events per genre
