@@ -1,3 +1,9 @@
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  alternates: { canonical: "https://osaka-live.net" },
+};
+
 import { Sidebar } from "@/components/Sidebar";
 import { MobileHeroCarousel } from "@/components/MobileHeroCarousel";
 import Image from "next/image";

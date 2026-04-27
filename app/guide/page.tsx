@@ -3,10 +3,13 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { getLang } from "@/lib/i18n/server";
 
-export const metadata = {
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
   title: "First-Timer's Guide | Osaka Live",
   description:
     "Everything you need to walk into a Namba Bears, Hokage, or Pangea show — tickets, drink fee, etiquette, phrases.",
+  alternates: { canonical: "https://osaka-live.net/guide" },
 };
 
 const t = (lang: "en" | "ja", en: string, ja: string) => (lang === "ja" ? ja : en);
