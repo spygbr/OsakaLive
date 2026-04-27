@@ -348,23 +348,15 @@ export default async function EventDetailPage({
                     </div>
                   </div>
 
-                  {/* Map placeholder */}
-                  <div className="w-full aspect-video bg-surface-container-highest relative overflow-hidden border border-outline-variant group cursor-pointer mb-4">
-                    <Image
-                      src={placeholderImage(`${venue.slug}-map`, 600, 300)}
-                      alt={`Map of ${venue.name_en}`}
-                      fill
-                      className="object-cover grayscale opacity-50 group-hover:opacity-80 transition-opacity"
-                      unoptimized
-                    />
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <span className="bg-background/80 px-3 py-1 font-headline font-bold text-xs uppercase tracking-widest border border-outline-variant flex items-center gap-2">
-                        {t("event_openInMaps")} <ExternalLink className="w-3 h-3" />
-                      </span>
-                    </div>
-                  </div>
-
                   <div className="flex gap-2">
+                    <a
+                      href={`https://maps.google.com/?q=${encodeURIComponent(venue.address_en ?? venue.name_en ?? "")}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex-1 border border-outline-variant py-2 font-headline font-bold text-[10px] uppercase tracking-widest hover:bg-surface-container transition-colors text-center flex items-center justify-center gap-1"
+                    >
+                      {t("event_openInMaps")} <ExternalLink className="w-3 h-3" />
+                    </a>
                     {venue.website_url && (
                       <a
                         href={venue.website_url}
