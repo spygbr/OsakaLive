@@ -67,6 +67,8 @@ const SKIP_LLM            = process.argv.includes('--skip-llm')
 const SKIP_IMAGE          = process.argv.includes('--skip-image')
 const SKIP_BIO            = process.argv.includes('--skip-bio')
 const BIO_ONLY            = process.argv.includes('--bio-only')
+// --genre-only: refresh genre_id for artists missing it; skips image/bio/IG
+const GENRE_ONLY          = process.argv.includes('--genre-only')
 const TRANSLATE_BIOS      = process.argv.includes('--translate-bios')
 const INCLUDE_SITE_FALLBACK = process.argv.includes('--include-site-fallback')
 const FORCE               = process.argv.includes('--force')
@@ -153,19 +155,22 @@ interface ScoredCandidate extends RawCandidate {
 }
 
 // ── Genre mapping ──────────────────────────────────────────────────────────────
-// Maps Spotify/TheAudioDB genre tag substrings → genres.id in priority order.
+// Maps genre tag substrings → genres.id in priority order.
 // More-specific tags are checked first; "rock" is last (everything is rock).
+// Aliases: math rock→rock/indie, shoegaze→indie, post-punk→punk,
+//   stoner→metal, experimental→noise, ambient→electronic, etc.
 const GENRE_MAP: { pattern: RegExp; id: number }[] = [
-  { pattern: /noise/i,                         id: 3  }, // Noise
-  { pattern: /hardcore/i,                      id: 9  }, // Hardcore
-  { pattern: /psychedel|psych\b/i,             id: 8  }, // Psychedelic
-  { pattern: /metal|doom|sludge|drone/i,       id: 7  }, // Metal
-  { pattern: /punk/i,                          id: 2  }, // Punk
-  { pattern: /jazz/i,                          id: 5  }, // Jazz
-  { pattern: /electro|techno|house|synth|edm/i, id: 6 }, // Electronic
-  { pattern: /folk|country/i,                  id: 10 }, // Folk
-  { pattern: /indie/i,                         id: 4  }, // Indie
-  { pattern: /rock/i,                          id: 1  }, // Rock (catch-all)
+  { pattern: /noise|experimental|avant.?garde/i,            id: 3  }, // Noise
+  { pattern: /hardcore|grindcore|powerviolence/i,           id: 9  }, // Hardcore
+  { pattern: /psychedel|psych\b|kosmische|krautrock/i,     id: 8  }, // Psychedelic
+  { pattern: /metal|doom|sludge|drone|stoner|deathcore|black.?metal|death.?metal|thrash/i, id: 7 }, // Metal
+  { pattern: /post.?punk|crust|oi\b/i,                     id: 2  }, // Punk (post-punk→punk)
+  { pattern: /punk/i,                                       id: 2  }, // Punk
+  { pattern: /jazz|bossa|swing|bebop|fusion/i,              id: 5  }, // Jazz
+  { pattern: /electro|techno|house|synth|edm|ambient|idm|chillwave|vaporwave|darkwave/i, id: 6 }, // Electronic
+  { pattern: /folk|country|bluegrass|americana/i,           id: 10 }, // Folk
+  { pattern: /shoegaze|dream.?pop|math.?rock|emo|post.?rock|indie/i, id: 4 }, // Indie
+  { pattern: /rock/i,                                       id: 1  }, // Rock (catch-all)
 ]
 
 function mapGenre(tags: string[]): number | null {
@@ -478,7 +483,20 @@ async function searchBandcamp(artist: Artist): Promise<RawCandidate[]> {
       const bioText = bioDivMatch?.[1] ?? metaDescMatch?.[1]
       if (bioText) bioEn = bioText
 
-      out.push({ sourceId: bandUrl, sourceUrl: bandUrl, imageUrl, matchName: bandTitle, notes: 'Bandcamp band page', bioEn })
+      // Extract genre/tag chips from Bandcamp <a class="tag">...</a> elements
+      const genreTags: string[] = []
+      const tagPattern = /<a[^>]+class=["'][^"']*tag[^"']*["'][^>]*>([^<]+)<\/a>/gi
+      let tagMatch: RegExpExecArray | null
+      while ((tagMatch = tagPattern.exec(bandHtml)) !== null) {
+        const tag = tagMatch[1].trim()
+        if (tag) genreTags.push(tag)
+      }
+
+      out.push({
+        sourceId: bandUrl, sourceUrl: bandUrl, imageUrl, matchName: bandTitle,
+        notes: 'Bandcamp band page', bioEn,
+        genreTags: genreTags.length ? genreTags : undefined,
+      })
       break
     } catch { /* swallow */ }
     await sleep(1000)
