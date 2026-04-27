@@ -1,7 +1,20 @@
 import type {NextConfig} from 'next';
 
+// Canonical domain — kansailive.com and kansai.live 301 to osaka-live.net
+async function redirects() {
+  const canonical = "https://osaka-live.net";
+  const aliases = ["kansailive.com", "www.kansailive.com", "kansai.live", "www.kansai.live"];
+  return aliases.map((host) => ({
+    source: "/(.*)",
+    has: [{ type: "host" as const, value: host }],
+    destination: `${canonical}/:1`,
+    permanent: true,
+  }));
+}
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  redirects,
   eslint: {
     ignoreDuringBuilds: true,
   },

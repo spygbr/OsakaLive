@@ -20,9 +20,52 @@ const inter = Inter({
   variable: "--font-inter",
 });
 
+const BASE_URL = "https://osaka-live.net";
+
 export const metadata: Metadata = {
-  title: "Osaka Live House Guide",
-  description: "Underground music events in Osaka",
+  metadataBase: new URL(BASE_URL),
+  title: {
+    default: "Osaka Live House Guide | Underground Music Events & Venues",
+    template: "%s | Osaka Live",
+  },
+  description:
+    "Discover underground live music in Osaka — punk, metal, jazz, electronic & more. Upcoming shows, ticket info, and a venue guide for Namba, Shinsaibashi & beyond.",
+  keywords: [
+    "osaka live music",
+    "osaka livehouse",
+    "osaka live house",
+    "osaka underground music",
+    "namba live music",
+    "kansai live music",
+    "osaka concerts",
+    "osaka punk",
+    "osaka metal",
+    "osaka jazz",
+    "japan live music",
+    "osaka shows tonight",
+  ],
+  authors: [{ name: "Osaka Live" }],
+  creator: "Osaka Live",
+  publisher: "Osaka Live",
+  robots: { index: true, follow: true },
+  alternates: { canonical: BASE_URL },
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    alternateLocale: "ja_JP",
+    url: BASE_URL,
+    siteName: "Osaka Live House Guide",
+    title: "Osaka Live House Guide | Underground Music Events & Venues",
+    description:
+      "Discover underground live music in Osaka — punk, metal, jazz, electronic & more. Upcoming shows, ticket info, and venue guide.",
+    images: [{ url: "/icons/icon-512.png", width: 512, height: 512, alt: "Osaka Live" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Osaka Live House Guide",
+    description: "Underground live music in Osaka — upcoming shows, venues & tickets.",
+    images: ["/icons/icon-512.png"],
+  },
   themeColor: "#f2ca50",
 };
 

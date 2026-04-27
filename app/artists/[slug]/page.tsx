@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Sidebar } from "@/components/Sidebar";
 import Image from "next/image";
 import Link from "next/link";
@@ -19,6 +20,31 @@ export const revalidate = 60;
 export async function generateStaticParams() {
   const slugs = await getAllArtistSlugs();
   return slugs.map((slug) => ({ slug }));
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const result = await getArtistBySlug(slug);
+  if (!result) return {};
+  const { artist } = result;
+  const genre = artist.genre?.name_en ?? "music";
+  const desc = artist.bio_en
+    ? artist.bio_en.slice(0, 155)
+    : `${artist.name_en} — ${genre} artist playing live in Osaka. Upcoming shows, tour dates & tickets.`;
+  return {
+    title: `${artist.name_en} | Osaka Live`,
+    description: desc,
+    alternates: { canonical: `https://osaka-live.net/artists/${slug}` },
+    openGraph: {
+      title: `${artist.name_en} — Live in Osaka`,
+      description: desc,
+      url: `https://osaka-live.net/artists/${slug}`,
+    },
+  };
 }
 
 export default async function ArtistDetailPage({

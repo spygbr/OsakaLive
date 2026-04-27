@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Sidebar } from "@/components/Sidebar";
 import { MobileTicketBar } from "@/components/MobileTicketBar";
 import Image from "next/image";
@@ -14,6 +15,36 @@ export const revalidate = 60;
 export async function generateStaticParams() {
   const slugs = await getAllEventSlugs();
   return slugs.map((slug) => ({ id: slug }));
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id: slug } = await params;
+  const event = await getEventBySlug(slug);
+  if (!event) return {};
+  const venueName = event.venue?.name_en ?? "Osaka";
+  const artists = event.artists.map((a) => a.name_en).join(", ");
+  const dateStr = event.event_date
+    ? new Date(event.event_date).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
+    : "";
+  const title = `${event.title_en} at ${venueName}${dateStr ? ` — ${dateStr}` : ""}`;
+  const desc = event.description_en
+    ? event.description_en.slice(0, 155)
+    : `${event.title_en} live at ${venueName}${artists ? ` featuring ${artists}` : ""}. Buy tickets and get show info on Osaka Live.`;
+  return {
+    title,
+    description: desc,
+    alternates: { canonical: `https://osaka-live.net/event/${slug}` },
+    openGraph: {
+      title,
+      description: desc,
+      url: `https://osaka-live.net/event/${slug}`,
+      type: "article",
+    },
+  };
 }
 
 export default async function EventDetailPage({
@@ -62,8 +93,50 @@ export default async function EventDetailPage({
     (eventDesc ? `&details=${encodeURIComponent(eventDesc.slice(0, 500))}` : '');
   const icalUrl = `/api/event/${event.slug}/ical`;
 
+  // ── JSON-LD structured data ───────────────────────────────────────────────
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "MusicEvent",
+    name: event.title_en,
+    description: event.description_en ?? undefined,
+    startDate: event.event_date + (event.start_time ? `T${event.start_time}+09:00` : ""),
+    url: `https://osaka-live.net/event/${event.slug}`,
+    ...(venue && {
+      location: {
+        "@type": "MusicVenue",
+        name: venue.name_en,
+        address: {
+          "@type": "PostalAddress",
+          addressLocality: "Osaka",
+          addressCountry: "JP",
+          streetAddress: venue.address_en ?? undefined,
+        },
+        url: venue.website_url ?? undefined,
+      },
+    }),
+    performer: artists.map((a) => ({ "@type": "MusicGroup", name: a.name_en })),
+    ...(event.ticket_price_adv != null && {
+      offers: {
+        "@type": "Offer",
+        price: event.ticket_price_adv,
+        priceCurrency: "JPY",
+        availability: "https://schema.org/InStock",
+        url: `https://osaka-live.net/event/${event.slug}`,
+      },
+    }),
+    organizer: {
+      "@type": "Organization",
+      name: "Osaka Live",
+      url: "https://osaka-live.net",
+    },
+  };
+
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       <Sidebar />
       <main className="flex-1 bg-surface-dim pb-32 md:pb-0 overflow-x-hidden">
 

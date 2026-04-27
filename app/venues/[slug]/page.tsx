@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Sidebar } from "@/components/Sidebar";
 import Image from "next/image";
 import Link from "next/link";
@@ -21,6 +22,30 @@ export async function generateStaticParams() {
   return slugs.map((slug) => ({ slug }));
 }
 
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const venue = await getVenueBySlug(slug);
+  if (!venue) return {};
+  const area = venue.area?.name_en ?? "Osaka";
+  const desc = venue.description_en
+    ? venue.description_en.slice(0, 155)
+    : `Live music at ${venue.name_en} in ${area}, Osaka. Upcoming shows, tickets, and venue info.`;
+  return {
+    title: `${venue.name_en} | ${area} Live Music Venue`,
+    description: desc,
+    alternates: { canonical: `https://osaka-live.net/venues/${slug}` },
+    openGraph: {
+      title: `${venue.name_en} — ${area} Live Music`,
+      description: desc,
+      url: `https://osaka-live.net/venues/${slug}`,
+    },
+  };
+}
+
 export default async function VenueDetailPage({
   params,
 }: {
@@ -34,8 +59,27 @@ export default async function VenueDetailPage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const area = (venue as any).area as { name_en: string; name_ja: string; slug: string } | null;
 
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "MusicVenue",
+    name: venue.name_en,
+    alternateName: venue.name_ja,
+    address: {
+      "@type": "PostalAddress",
+      addressLocality: area?.name_en ?? "Osaka",
+      addressCountry: "JP",
+      streetAddress: (venue as any).address_en ?? undefined,
+    },
+    url: venue.website_url ?? `https://osaka-live.net/venues/${slug}`,
+    ...(venue.capacity && { maximumAttendeeCapacity: venue.capacity }),
+  };
+
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       <Sidebar />
       <main className="flex-1 bg-surface-dim pb-20 md:pb-0 overflow-x-hidden">
 
