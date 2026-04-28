@@ -30,14 +30,6 @@ export function Sidebar({ areas = [], genres = [] }: SidebarProps) {
     clearAll,
   } = useFilters();
 
-  const activeFilterLabels = [
-    area && t("sidebar_area").split("/")[0].trim(),
-    genre && t("sidebar_genre").split("/")[0].trim(),
-    price && t("sidebar_price").split("/")[0].trim(),
-    (isTonightActive || isWeekendActive) &&
-      t("sidebar_date").split("/")[0].trim(),
-  ].filter(Boolean);
-
   return (
     <aside className="hidden md:flex flex-col h-[calc(100vh-64px)] sticky top-16 left-0 overflow-y-auto bg-surface-container-lowest border-r border-outline-variant divide-y divide-outline-variant w-64 shrink-0">
 
@@ -222,14 +214,6 @@ export function Sidebar({ areas = [], genres = [] }: SidebarProps) {
         </div>
       </div>
 
-      {/* ── Active filter summary ──────────────────────────────────────────── */}
-      {hasActiveFilters && (
-        <div className="px-6 py-3 bg-surface-container-low">
-          <div className="text-[10px] font-mono text-primary uppercase tracking-widest">
-            {activeFilterLabels.join(" + ")} {t("sidebar_active")}
-          </div>
-        </div>
-      )}
     </aside>
   );
 }

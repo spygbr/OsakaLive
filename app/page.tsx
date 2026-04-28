@@ -44,10 +44,10 @@ export default async function Home() {
       <main className="flex-1 bg-surface-container-lowest overflow-x-hidden pb-20 md:pb-0">
 
         {/* ── Mobile Hero: Swipeable Carousel ────────────────────────────── */}
-        <MobileHeroCarousel events={featuredEvents} lang={lang} />
+        {false && <MobileHeroCarousel events={featuredEvents} lang={lang} />}
 
         {/* ── Desktop Hero: Featured Shows ────────────────────────────────── */}
-        <section className="hidden md:block border-b-2 border-outline-variant">
+        {false && <section className="hidden md:block border-b-2 border-outline-variant">
           <div className="p-6 flex justify-between items-end border-b border-outline-variant bg-surface">
             <div>
               <h2 className="text-4xl font-black font-headline tracking-tighter text-on-background uppercase">
@@ -129,7 +129,7 @@ export default async function Home() {
               </div>
             )}
           </div>
-        </section>
+        </section>}
 
         {/* ── Desktop Main Grid ──────────────────────────────────────────── */}
         <div className="hidden md:grid grid-cols-1 lg:grid-cols-12">
