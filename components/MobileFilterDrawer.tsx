@@ -113,7 +113,7 @@ export function MobileFilterDrawer({
             {/* Header */}
             <div className="flex items-center justify-between px-4 h-12 border-b border-outline-variant shrink-0 bg-surface-container">
               <span className="font-headline font-bold text-sm uppercase tracking-widest text-primary">
-                {t("sidebar_filterSystem")} / フィルター
+                {lang === "ja" ? "フィルター" : "FILTERS"}
               </span>
               <div className="flex items-center gap-3">
                 {hasPendingFilters && (

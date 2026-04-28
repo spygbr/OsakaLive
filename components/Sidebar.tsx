@@ -33,17 +33,9 @@ export function Sidebar({ areas = [], genres = [] }: SidebarProps) {
   return (
     <aside className="hidden md:flex flex-col h-[calc(100vh-64px)] sticky top-16 left-0 overflow-y-auto bg-surface-container-lowest border-r border-outline-variant divide-y divide-outline-variant w-64 shrink-0">
 
-      {/* ── Header ────────────────────────────────────────────────────────── */}
-      <div className="p-6 flex items-center justify-between">
-        <div>
-          <div className="text-lg font-bold text-primary font-headline uppercase">
-            {t("sidebar_filterSystem")}
-          </div>
-          <div className="text-[10px] text-outline font-mono tracking-widest mt-1">
-            {t("sidebar_version")}
-          </div>
-        </div>
-        {hasActiveFilters && (
+      {/* ── Header (clear-all when filters active) ──────────────────────── */}
+      {hasActiveFilters && (
+        <div className="px-6 py-3 flex justify-end">
           <button
             onClick={clearAll}
             className="flex items-center gap-1 text-[9px] font-mono text-outline hover:text-primary transition-colors uppercase"
@@ -51,8 +43,8 @@ export function Sidebar({ areas = [], genres = [] }: SidebarProps) {
           >
             ✕ {t("sidebar_clear")}
           </button>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* ── Date presets (Search page only — calendar has its own nav) ───── */}
       {pathname !== "/calendar" && (

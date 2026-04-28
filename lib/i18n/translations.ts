@@ -92,8 +92,6 @@ export const translations = {
   calendar_eventsOnDate:   { en: 'Events on',                 ja: 'イベント：' },
 
   // ── Sidebar ──────────────────────────────────────────────────────────────
-  sidebar_filterSystem:    { en: 'FILTER SYSTEM',             ja: 'フィルター' },
-  sidebar_version:         { en: 'V.2.04_ARCHIVE',            ja: 'V.2.04_アーカイブ' },
   sidebar_clear:           { en: 'CLEAR',                     ja: 'クリア' },
   sidebar_date:            { en: 'DATE / 日程',                ja: '日程 / DATE' },
   sidebar_allUpcoming:     { en: 'ALL UPCOMING',              ja: '全て' },
