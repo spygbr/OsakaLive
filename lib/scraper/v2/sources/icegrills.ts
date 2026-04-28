@@ -15,7 +15,7 @@ import {
   extractDate,
 } from '../source'
 import type { RawEvent, RejectedEvent } from '../types'
-import { mentionsOsakaVenue, extractOsakaVenueName } from '../../osaka-filter'
+import { mentionsOsakaVenue, extractOsakaVenueName } from '../osaka-filter'
 
 const TOUR_LINK_RE =
   /<a[^>]+href=["'](https?:\/\/icegrills\.jp\/[^"']+|\/[^"']+)["'][^>]*>\s*<img[^>]*>/gi

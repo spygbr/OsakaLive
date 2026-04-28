@@ -22,7 +22,7 @@ import {
   extractDate,
 } from '../source'
 import type { RawEvent, RejectedEvent } from '../types'
-import { mentionsOsakaVenue, extractOsakaVenueName } from '../../osaka-filter'
+import { mentionsOsakaVenue, extractOsakaVenueName } from '../osaka-filter'
 
 const ARTICLE_LINK_RE =
   /<article[^>]*>[\s\S]*?<a[^>]+href=["'](https:\/\/punxsavetheearth\.com\/[^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi

@@ -114,34 +114,41 @@ function normalizeTitle(input: string | null | undefined): string {
     .trim()
 }
 
+/** Row plus its pre-computed normalized title — paired so we never call
+ *  normalizeTitle() more than once per event in the upsert pipeline. */
+type PreparedEvent = { row: EventInsert; norm: string }
+
 async function upsertEvents(
   supabase: SupabaseClient,
   sourceId: string,
-  rows: EventInsert[],
+  prepared: PreparedEvent[],
 ): Promise<{ ids: Map<string, string>; upserted: number }> {
-  if (rows.length === 0) return { ids: new Map(), upserted: 0 }
+  if (prepared.length === 0) return { ids: new Map(), upserted: 0 }
 
-  // Dedupe within batch on (venue_id, event_date, normalize_title(title_raw))
-  // to match the DB unique constraint key. Without this, two raw titles that
-  // collapse to the same normalized form crash the upsert.
-  const normKey = (r: EventInsert) =>
-    `${r.venue_id}|${r.event_date}|${normalizeTitle(r.title_raw)}`
-  const unique = Array.from(new Map(rows.map((r) => [normKey(r), r])).values())
+  // Dedupe within batch on (venue_id, event_date, norm) to match the DB
+  // unique constraint key. Without this, two raw titles that collapse to the
+  // same normalized form crash the upsert with "ON CONFLICT DO UPDATE command
+  // cannot affect row a second time". `norm` was computed once at the call
+  // site — no recomputation here.
+  const seen = new Map<string, EventInsert>()
+  for (const { row, norm } of prepared) {
+    seen.set(`${row.venue_id}|${row.event_date}|${norm}`, row)
+  }
+  const unique = Array.from(seen.values())
 
+  // Select title_norm (a generated column = normalize_title(title_raw)) so the
+  // ids map is keyed by the DB-canonical normalization. This eliminates the
+  // JS/SQL drift risk in the lookup path: even if our JS normalizeTitle()
+  // diverges from the SQL function, the id map still resolves correctly.
   const { data, error } = await supabase
     .from('events')
     .upsert(unique, { onConflict: 'venue_id,event_date,title_norm', ignoreDuplicates: false })
-    .select('id, venue_id, event_date, title_raw')
+    .select('id, venue_id, event_date, title_norm')
   if (error) throw new Error(`event upsert (${sourceId}): ${error.message}`)
 
-  // Index returned ids by both the raw-title key (for direct lookup by callers)
-  // and the normalized key (so callers whose raw title differs from what the
-  // DB persisted can still find the id).
   const ids = new Map<string, string>()
   for (const r of data ?? []) {
-    const id = r.id as string
-    ids.set(`${r.venue_id}|${r.event_date}|${r.title_raw}`, id)
-    ids.set(`${r.venue_id}|${r.event_date}|norm:${normalizeTitle(r.title_raw)}`, id)
+    ids.set(`${r.venue_id}|${r.event_date}|${r.title_norm as string}`, r.id as string)
   }
   return { ids, upserted: data?.length ?? 0 }
 }
@@ -295,32 +302,36 @@ export async function runSource(
     }
 
     // ── Upsert events ──────────────────────────────────────────────────
-    const eventRows: EventInsert[] = resolved.map(({ event, venueId }) => ({
-      venue_id: venueId,
-      event_date: event.eventDate,
-      title_raw: event.titleRaw,
-      description: event.description ?? null,
-      start_time: event.startTime ?? null,
-      doors_time: event.doorsTime ?? null,
-      ticket_price_adv: event.ticketPriceAdv ?? null,
-      ticket_price_door: event.ticketPriceDoor ?? null,
-      ticket_url: event.ticketUrl ?? null,
-      primary_source_id: source.id,
+    // Compute normalizeTitle() exactly once per event here. The norm is reused
+    // for (a) batch dedup inside upsertEvents, and (b) the post-upsert id
+    // lookup below. Previously this regex-heavy normalization ran 3× per row.
+    const prepared: PreparedEvent[] = resolved.map(({ event, venueId }) => ({
+      row: {
+        venue_id: venueId,
+        event_date: event.eventDate,
+        title_raw: event.titleRaw,
+        description: event.description ?? null,
+        start_time: event.startTime ?? null,
+        doors_time: event.doorsTime ?? null,
+        ticket_price_adv: event.ticketPriceAdv ?? null,
+        ticket_price_door: event.ticketPriceDoor ?? null,
+        ticket_url: event.ticketUrl ?? null,
+        primary_source_id: source.id,
+      },
+      norm: normalizeTitle(event.titleRaw),
     }))
 
-    const { ids, upserted } = await upsertEvents(supabase, source.id, eventRows)
+    const { ids, upserted } = await upsertEvents(supabase, source.id, prepared)
     result.upserted = upserted
 
     // ── Upsert event_sources ───────────────────────────────────────────
+    // Use the cached norm from prepared[i] — no recomputation. ids map is
+    // keyed by DB-canonical title_norm, so the lookup is single-shot.
     type SourceRecord = { event_id: string; source_url: string | null; raw_payload: unknown }
     const sourceRecords: SourceRecord[] = []
-    for (const { event, venueId } of resolved) {
-      // Try exact title_raw match first; fall back to normalized key so that
-      // events already in the DB (returned as UPDATEs rather than INSERTs by
-      // the upsert) are still found even when title_raw casing drifted.
-      const id =
-        ids.get(`${venueId}|${event.eventDate}|${event.titleRaw}`) ??
-        ids.get(`${venueId}|${event.eventDate}|norm:${normalizeTitle(event.titleRaw)}`)
+    for (let i = 0; i < resolved.length; i++) {
+      const { event, venueId } = resolved[i]
+      const id = ids.get(`${venueId}|${event.eventDate}|${prepared[i].norm}`)
       if (!id) continue
       sourceRecords.push({ event_id: id, source_url: event.sourceUrl, raw_payload: event.payload ?? null })
     }

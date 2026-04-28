@@ -7,7 +7,7 @@
 
 import { AggregatorSource, stripTags, jstYear } from '../source'
 import type { ParseResult, RawEvent, RejectedEvent } from '../types'
-import { mentionsOsakaVenue, extractOsakaVenueName } from '../../osaka-filter'
+import { mentionsOsakaVenue, extractOsakaVenueName } from '../osaka-filter'
 
 const EVENT_RE = /(\d{1,2})月(\d{1,2})日\s*[（(]([^）)]+)[）)]/g
 const YEAR_PREFIX_RE = /(\d{4})年\s*(?=\d{1,2}月)/

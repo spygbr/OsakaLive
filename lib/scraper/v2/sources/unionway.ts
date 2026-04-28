@@ -6,7 +6,7 @@
 
 import { AggregatorSource, stripTags, extractDate } from '../source'
 import type { ParseResult, RawEvent, RejectedEvent } from '../types'
-import { mentionsOsakaVenue, extractOsakaVenueName } from '../../osaka-filter'
+import { mentionsOsakaVenue, extractOsakaVenueName } from '../osaka-filter'
 
 const TITLE_NOISE_RE = /^(?:ticket|チケット|料金|information|info|問い合わせ|主催|協力|企画)/i
 const HAS_DATE_RE = /\d{1,2}[\/\.\-月]\d{1,2}/
