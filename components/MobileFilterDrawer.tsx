@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { X, Calendar, Map as MapIcon } from "lucide-react";
 import { useFilters } from "@/hooks/use-filters";
+import { useFilterStore } from "@/lib/stores/filter-store";
 import { useFilterDrawer } from "@/lib/filter-drawer-context";
 import { useLang } from "@/lib/i18n/LangProvider";
 import type { AreaOption, GenreOptionWithCount } from "@/lib/supabase/queries";
@@ -13,6 +14,24 @@ interface MobileFilterDrawerProps {
   genres?: GenreOptionWithCount[];
 }
 
+function getTodayJST(): string {
+  const d = new Date(Date.now() + 9 * 60 * 60 * 1000);
+  return d.toISOString().slice(0, 10);
+}
+
+function getWeekendDates(): { sat: string; sun: string } {
+  const now = new Date(Date.now() + 9 * 60 * 60 * 1000);
+  const day = now.getUTCDay();
+  const daysToSat = day === 6 ? 0 : 6 - day;
+  const satMs = now.getTime() + daysToSat * 86_400_000;
+  const sat = new Date(satMs);
+  const sun = new Date(satMs + 86_400_000);
+  return {
+    sat: sat.toISOString().slice(0, 10),
+    sun: sun.toISOString().slice(0, 10),
+  };
+}
+
 export function MobileFilterDrawer({
   areas = [],
   genres = [],
@@ -20,26 +39,52 @@ export function MobileFilterDrawer({
   const { isOpen, close } = useFilterDrawer();
   const { t, lang } = useLang();
   const [showAllGenres, setShowAllGenres] = useState(false);
-  const {
-    area,
-    genre,
-    price,
-    isTonightActive,
-    isWeekendActive,
-    isAllUpcomingActive,
-    today,
-    weekend,
-    setParam,
-    clearAll,
-    hasActiveFilters,
-  } = useFilters();
+
+  // URL state (committed)
+  const { area: urlArea, genre: urlGenre, price: urlPrice, dateFrom: urlDateFrom, dateTo: urlDateTo, setParam } = useFilters();
+
+  // Pending (staged) state
+  const { pending, setPending, syncPending, resetPending } = useFilterStore();
+
+  const today = getTodayJST();
+  const weekend = getWeekendDates();
+
+  // Sync pending from URL when drawer opens
+  useEffect(() => {
+    if (isOpen) {
+      syncPending({
+        area: urlArea,
+        genre: urlGenre,
+        price: urlPrice,
+        dateFrom: urlDateFrom,
+        dateTo: urlDateTo,
+      });
+    }
+  }, [isOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Derived state from pending
+  const isTonightActive = pending.dateFrom === today && pending.dateTo === today;
+  const isWeekendActive = pending.dateFrom === weekend.sat && pending.dateTo === weekend.sun;
+  const isAllUpcomingActive = !pending.dateFrom && !pending.dateTo;
+  const hasPendingFilters = !!(pending.area || pending.genre || pending.price || pending.dateFrom || pending.dateTo);
 
   const activeCount = [
-    area,
-    genre,
-    price,
+    pending.area,
+    pending.genre,
+    pending.price,
     isTonightActive || isWeekendActive,
   ].filter(Boolean).length;
+
+  function handleApply() {
+    setParam({
+      area: pending.area || null,
+      genre: pending.genre || null,
+      price: pending.price || null,
+      date_from: pending.dateFrom || null,
+      date_to: pending.dateTo || null,
+    });
+    close();
+  }
 
   return (
     <AnimatePresence>
@@ -71,9 +116,9 @@ export function MobileFilterDrawer({
                 {t("sidebar_filterSystem")} / フィルター
               </span>
               <div className="flex items-center gap-3">
-                {hasActiveFilters && (
+                {hasPendingFilters && (
                   <button
-                    onClick={clearAll}
+                    onClick={resetPending}
                     className="text-[10px] font-mono text-outline hover:text-primary transition-colors uppercase"
                   >
                     {t("sidebar_clear")}
@@ -101,23 +146,17 @@ export function MobileFilterDrawer({
                     {
                       label: t("sidebar_allUpcoming"),
                       active: isAllUpcomingActive,
-                      onClick: () =>
-                        setParam({ date_from: null, date_to: null }),
+                      onClick: () => setPending({ dateFrom: "", dateTo: "" }),
                     },
                     {
                       label: t("sidebar_tonight"),
                       active: isTonightActive,
-                      onClick: () =>
-                        setParam({ date_from: today, date_to: today }),
+                      onClick: () => setPending({ dateFrom: today, dateTo: today }),
                     },
                     {
                       label: t("sidebar_weekend"),
                       active: isWeekendActive,
-                      onClick: () =>
-                        setParam({
-                          date_from: weekend.sat,
-                          date_to: weekend.sun,
-                        }),
+                      onClick: () => setPending({ dateFrom: weekend.sat, dateTo: weekend.sun }),
                     },
                   ] as const
                 ).map(({ label, active, onClick }) => (
@@ -142,9 +181,9 @@ export function MobileFilterDrawer({
                   {t("sidebar_area")}
                 </div>
                 <button
-                  onClick={() => setParam({ area: null })}
+                  onClick={() => setPending({ area: "" })}
                   className={`w-full text-left p-3 px-4 flex items-center gap-3 font-headline uppercase text-xs transition-colors ${
-                    !area
+                    !pending.area
                       ? "bg-primary-container text-on-primary-container font-bold border-l-4 border-primary"
                       : "text-outline hover:bg-surface-container-high"
                   }`}
@@ -155,11 +194,9 @@ export function MobileFilterDrawer({
                 {areas.map((a) => (
                   <button
                     key={a.slug}
-                    onClick={() =>
-                      setParam({ area: area === a.slug ? null : a.slug })
-                    }
+                    onClick={() => setPending({ area: pending.area === a.slug ? "" : a.slug })}
                     className={`w-full text-left p-3 px-4 flex items-center gap-3 font-headline uppercase text-xs transition-colors ${
-                      area === a.slug
+                      pending.area === a.slug
                         ? "bg-primary-container text-on-primary-container font-bold border-l-4 border-primary"
                         : "text-outline hover:bg-surface-container-high"
                     }`}
@@ -190,9 +227,9 @@ export function MobileFilterDrawer({
                 <div className="grid grid-cols-2 gap-px bg-outline-variant border-y border-outline-variant mx-4">
                   <button
                     data-testid="genre-all-btn"
-                    onClick={() => setParam({ genre: null })}
+                    onClick={() => setPending({ genre: "" })}
                     className={`p-2 text-[10px] font-bold uppercase transition-colors ${
-                      !genre
+                      !pending.genre
                         ? "bg-primary text-on-primary"
                         : "bg-surface-container text-outline hover:bg-surface-container-high"
                     }`}
@@ -200,17 +237,15 @@ export function MobileFilterDrawer({
                     {t("sidebar_all")}
                   </button>
                   {genres
-                    .filter((g) => showAllGenres || g.upcoming_count > 0 || genre === g.slug)
+                    .filter((g) => showAllGenres || g.upcoming_count > 0 || pending.genre === g.slug)
                     .map((g) => (
                       <button
                         key={g.slug}
                         data-testid="genre-btn"
                         data-slug={g.slug}
-                        onClick={() =>
-                          setParam({ genre: genre === g.slug ? null : g.slug })
-                        }
+                        onClick={() => setPending({ genre: pending.genre === g.slug ? "" : g.slug })}
                         className={`p-2 text-[10px] font-bold uppercase transition-colors ${
-                          genre === g.slug
+                          pending.genre === g.slug
                             ? "bg-primary text-on-primary"
                             : "bg-surface-container text-outline hover:bg-surface-container-high"
                         }`}
@@ -239,9 +274,9 @@ export function MobileFilterDrawer({
                   ).map(({ labelKey, value }) => (
                     <button
                       key={value}
-                      onClick={() => setParam({ price: value || null })}
+                      onClick={() => setPending({ price: value })}
                       className={`p-2 text-[10px] font-bold uppercase transition-colors ${
-                        price === value
+                        pending.price === value
                           ? "bg-primary text-on-primary"
                           : "bg-surface-container text-outline hover:bg-surface-container-high"
                       }`}
@@ -267,7 +302,7 @@ export function MobileFilterDrawer({
                 )}
               </div>
               <button
-                onClick={close}
+                onClick={handleApply}
                 className="bg-primary text-on-primary font-headline font-black text-xs uppercase px-6 py-3 active:scale-95 transition-transform"
               >
                 APPLY
