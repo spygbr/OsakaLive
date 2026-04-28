@@ -5,3 +5,8 @@ coverage/
 *.log
 .env*
 !.env.example
+
+# Local audit + test artifacts
+audit/
+test-results/
+playwright-report/
