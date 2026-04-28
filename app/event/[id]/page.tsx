@@ -94,12 +94,30 @@ export default async function EventDetailPage({
   const icalUrl = `/api/event/${event.slug}/ical`;
 
   // ── JSON-LD structured data ───────────────────────────────────────────────
+  // Add ~3 hrs to start_time for endDate estimate
+  function addHours(time: string, h: number): string {
+    const [hh, mm, ss] = time.split(":").map(Number);
+    const total = hh * 60 + mm + h * 60;
+    return `${String(Math.floor(total / 60) % 24).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}:${String(ss || 0).padStart(2, "0")}`;
+  }
+
+  const availMap: Record<string, string> = {
+    sold_out: "https://schema.org/SoldOut",
+    limited: "https://schema.org/LimitedAvailability",
+    available: "https://schema.org/InStock",
+  };
+
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "MusicEvent",
     name: event.title_en,
-    description: event.description_en ?? undefined,
+    description: event.description_en
+      ?? `${event.title_en} live at ${venue?.name_en ?? "Osaka"}${artists.length ? ` featuring ${artists.map((a) => a.name_en).join(", ")}` : ""}. Tickets and info on Osaka Live.`,
     startDate: event.event_date + (event.start_time ? `T${event.start_time}+09:00` : ""),
+    endDate: event.event_date + (event.start_time ? `T${addHours(event.start_time, 3)}+09:00` : "T23:00:00+09:00"),
+    eventStatus: "https://schema.org/EventScheduled",
+    eventAttendanceMode: "https://schema.org/OfflineEventAttendanceMode",
+    image: `https://osaka-live.net/og-image.png`,
     url: `https://osaka-live.net/event/${event.slug}`,
     ...(venue && {
       location: {
@@ -115,15 +133,13 @@ export default async function EventDetailPage({
       },
     }),
     performer: artists.map((a) => ({ "@type": "MusicGroup", name: a.name_en })),
-    ...(event.ticket_price_adv != null && {
-      offers: {
-        "@type": "Offer",
-        price: event.ticket_price_adv,
-        priceCurrency: "JPY",
-        availability: "https://schema.org/InStock",
-        url: `https://osaka-live.net/event/${event.slug}`,
-      },
-    }),
+    offers: {
+      "@type": "Offer",
+      price: event.ticket_price_adv ?? 0,
+      priceCurrency: "JPY",
+      availability: availMap[event.availability ?? "available"] ?? "https://schema.org/InStock",
+      url: event.ticket_url ?? `https://osaka-live.net/event/${event.slug}`,
+    },
     organizer: {
       "@type": "Organization",
       name: "Osaka Live",
