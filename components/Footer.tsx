@@ -16,12 +16,12 @@ export function Footer() {
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="flex flex-col gap-2 font-mono text-[10px] uppercase tracking-widest">
-          <a className="text-outline hover:text-primary underline" href="#">{t('footer_sitemap')}</a>
-          <a className="text-outline hover:text-primary underline" href="#">{t('footer_privacy')}</a>
+          <a className="text-outline hover:text-primary underline" href="/sitemap.xml">{t('footer_sitemap')}</a>
+          <a className="text-outline hover:text-primary underline" href="/privacy">{t('footer_privacy')}</a>
           <a className="text-outline hover:text-primary underline" href="#">{t('footer_contact')}</a>
         </div>
         <div className="flex flex-col gap-2 font-mono text-[10px] uppercase tracking-widest">
-          <a className="text-outline hover:text-primary underline" href="#">{t('footer_terms')}</a>
+          <a className="text-outline hover:text-primary underline" href="/terms">{t('footer_terms')}</a>
           <a className="text-outline hover:text-primary underline" href="#">{t('footer_venueSubmission')}</a>
           <a className="text-outline hover:text-primary underline" href="#">{t('footer_artistPortal')}</a>
         </div>
