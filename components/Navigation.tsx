@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Search, Home, Calendar, MapPin, User } from "lucide-react";
@@ -31,9 +32,17 @@ export function TopNav() {
       <div className="flex items-center gap-4 md:gap-8">
         <Link
           href="/"
-          className="text-xl md:text-xl font-black text-primary-container md:text-primary tracking-widest md:tracking-tighter font-headline uppercase"
+          aria-label="Osaka Live House Guide — home"
+          className="flex items-center shrink-0"
         >
-          OSAKA LIVE<span className="hidden md:inline"> HOUSE GUIDE</span>
+          <Image
+            src="/og-image.png"
+            alt="Osaka Live House Guide"
+            width={1200}
+            height={630}
+            priority
+            className="h-10 md:h-12 w-auto"
+          />
         </Link>
         <nav className="hidden md:flex items-center gap-6 font-headline uppercase tracking-tighter text-sm">
           <Link
