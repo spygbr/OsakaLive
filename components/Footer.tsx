@@ -27,7 +27,6 @@ export function Footer() {
         </div>
       </div>
       <div className="flex flex-col items-start md:items-end gap-4">
-        <div className="bg-primary-container text-background p-2 text-[10px] font-bold font-mono">{t('footer_stamp')}</div>
         <div className="flex gap-4">
           <Rss className="w-5 h-5 text-outline hover:text-primary cursor-pointer" />
           <Share2 className="w-5 h-5 text-outline hover:text-primary cursor-pointer" />

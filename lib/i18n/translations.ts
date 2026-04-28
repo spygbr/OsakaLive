@@ -132,7 +132,6 @@ export const translations = {
   footer_terms:            { en: 'Terms of Service',          ja: '利用規約' },
   footer_venueSubmission:  { en: 'Venue Submission',          ja: '会場登録' },
   footer_artistPortal:     { en: 'Artist Portal',             ja: 'アーティストポータル' },
-  footer_stamp:            { en: 'STAMP: VERIFIED_OSAKA_HUB', ja: 'スタンプ: 認証済_大阪ハブ' },
 } as const
 
 export type TranslationKey = keyof typeof translations
