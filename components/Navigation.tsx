@@ -36,12 +36,12 @@ export function TopNav() {
           className="flex items-center shrink-0"
         >
           <Image
-            src="/og-image.png"
+            src="/logo.png"
             alt="Osaka Live House Guide"
-            width={1200}
-            height={630}
+            width={804}
+            height={400}
             priority
-            className="h-10 md:h-12 w-auto"
+            className="h-14 md:h-16 w-auto"
           />
         </Link>
         <nav className="hidden md:flex items-center gap-6 font-headline uppercase tracking-tighter text-sm">
