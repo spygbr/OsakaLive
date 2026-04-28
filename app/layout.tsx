@@ -8,7 +8,7 @@ import { LangProvider } from "@/lib/i18n/LangProvider";
 import { FilterDrawerProvider } from "@/lib/filter-drawer-context";
 import { MobileFilterDrawer } from "@/components/MobileFilterDrawer";
 import { getLang } from "@/lib/i18n/server";
-import { getAreas, getGenresWithCounts } from "@/lib/supabase/queries";
+import { getAreas, getGenresWithCounts, getLastScrapedAt } from "@/lib/supabase/queries";
 
 const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
@@ -84,10 +84,11 @@ export default async function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [lang, areas, genres] = await Promise.all([
+  const [lang, areas, genres, lastUpdated] = await Promise.all([
     getLang(),
     getAreas(),
     getGenresWithCounts(),
+    getLastScrapedAt(),
   ]);
 
   return (
@@ -106,7 +107,7 @@ export default async function RootLayout({
             <TopNav />
             <MobileFilterDrawer areas={areas} genres={genres} />
             <div className="flex flex-1">{children}</div>
-            <Footer />
+            <Footer lastUpdated={lastUpdated} />
             <BottomNav />
           </FilterDrawerProvider>
         </LangProvider>

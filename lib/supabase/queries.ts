@@ -208,6 +208,22 @@ async function resolveFilterIds(
 // Queries
 // ---------------------------------------------------------------------------
 
+/** Most recent events.updated_at — proxy for last scraper run. ISO string or null. */
+export async function getLastScrapedAt(): Promise<string | null> {
+  const supabase = createServerClient()
+  const { data, error } = await supabase
+    .from('events')
+    .select('updated_at')
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error) {
+    console.error(`[getLastScrapedAt] ${error.message}`)
+    return null
+  }
+  return data?.updated_at ?? null
+}
+
 /** Featured upcoming events (is_featured = true, ≥ today) */
 export async function getFeaturedEvents(limit = 3): Promise<EventWithVenue[]> {
   const supabase = createServerClient()

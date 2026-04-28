@@ -3,8 +3,30 @@
 import { Share2, Rss } from "lucide-react";
 import { useLang } from "@/lib/i18n/LangProvider";
 
-export function Footer() {
-  const { t } = useLang();
+interface FooterProps {
+  lastUpdated?: string | null; // ISO timestamp
+}
+
+function formatLastUpdated(iso: string | null | undefined, lang: "en" | "ja"): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  // Render in JST
+  const fmt = new Intl.DateTimeFormat(lang === "ja" ? "ja-JP" : "en-US", {
+    timeZone: "Asia/Tokyo",
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  return `${fmt.format(d)} JST`;
+}
+
+export function Footer({ lastUpdated }: FooterProps) {
+  const { t, lang } = useLang();
+  const formatted = formatLastUpdated(lastUpdated, lang);
 
   return (
     <footer className="hidden md:grid w-full py-12 px-8 grid-cols-1 md:grid-cols-3 gap-8 bg-background border-t-2 border-outline-variant">
@@ -13,6 +35,12 @@ export function Footer() {
         <p className="font-mono text-[10px] text-outline uppercase leading-relaxed">
           {t('footer_copyright')}
         </p>
+        {formatted && (
+          <p className="font-mono text-[10px] text-outline uppercase leading-relaxed">
+            {lang === "ja" ? "最終更新: " : "Last Updated: "}
+            <span className="text-primary">{formatted}</span>
+          </p>
+        )}
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="flex flex-col gap-2 font-mono text-[10px] uppercase tracking-widest">

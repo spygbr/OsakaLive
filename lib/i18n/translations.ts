@@ -123,7 +123,7 @@ export const translations = {
   common_status:           { en: 'STATUS',                    ja: 'ステータス' },
 
   // ── Footer ───────────────────────────────────────────────────────────────
-  footer_copyright:        { en: '©2024 OSAKA LIVE HOUSE GUIDE. ALL RIGHTS RESERVED. Unauthorized duplication is a violation of applicable laws.', ja: '©2024 大阪ライブハウスガイド. 無断複製禁止。' },
+  footer_copyright:        { en: '©2026 OSAKA LIVE HOUSE GUIDE. ALL RIGHTS RESERVED. Unauthorized duplication is a violation of applicable laws.', ja: '©2026 大阪ライブハウスガイド. 無断複製禁止。' },
   footer_sitemap:          { en: 'Sitemap',                   ja: 'サイトマップ' },
   footer_privacy:          { en: 'Privacy Policy',            ja: 'プライバシーポリシー' },
   footer_contact:          { en: 'Contact',                   ja: 'お問い合わせ' },
