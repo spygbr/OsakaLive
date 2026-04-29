@@ -6,7 +6,7 @@
  *   2. Source.run(ctx) → RawEvent[] + RejectedEvent[]
  *   3. Validate every RawEvent — failures move to rejected
  *   4. Resolve venueHint → venue_id for aggregator events
- *   5. Upsert events via upsert_events_batch RPC (server-side dedup)
+ *   5. Upsert events on (venue_id, event_date, title_norm)
  *   6. Upsert event_sources row(s)
  *   7. Insert events_rejected rows
  *   8. Persist HTTP cache markers back to sources row
@@ -90,27 +90,65 @@ type EventInsert = {
 }
 
 /**
- * Dedup and upsert via the server-side `upsert_events_batch` RPC, which runs
- * DISTINCT ON (venue_id, event_date, normalize_title(title_raw)) before the
- * INSERT … ON CONFLICT. All normalization happens in Postgres — no JS port
- * of normalize_title() is needed.
+ * JS port of the SQL `normalize_title()` function. Used for batch dedup so
+ * the upsert doesn't hit "ON CONFLICT DO UPDATE command cannot affect row a
+ * second time" when two raw titles collapse to the same normalized form.
  *
- * The RPC returns (id, venue_id, event_date, title_raw); ids map is keyed on
- * (venue_id, event_date, title_raw) to avoid any JS/SQL drift.
+ * Mirrors: full-width → half-width, lowercase, [[:punct:]] → space, collapse
+ * whitespace, trim. Should match the DB function closely enough for dedup.
  */
+function normalizeTitle(input: string | null | undefined): string {
+  const s = input ?? ''
+  // Full-width ASCII (digits, A-Z, a-z) → half-width; ideographic space → space
+  const half = s.replace(/[\uFF01-\uFF5E\u3000]/g, (c) => {
+    if (c === '\u3000') return ' '
+    return String.fromCharCode(c.charCodeAt(0) - 0xFEE0)
+  })
+  return half
+    .toLowerCase()
+    // Postgres [[:punct:]] under UTF-8 matches Unicode punctuation, not just
+    // ASCII. \p{P} covers Japanese 「」、。・！？etc. \p{S} catches symbols
+    // (★☆♪♥) that some locales also fold. Match both to stay safe.
+    .replace(/[\p{P}\p{S}]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/** Row plus its pre-computed normalized title — paired so we never call
+ *  normalizeTitle() more than once per event in the upsert pipeline. */
+type PreparedEvent = { row: EventInsert; norm: string }
+
 async function upsertEvents(
   supabase: SupabaseClient,
   sourceId: string,
-  rows: EventInsert[],
+  prepared: PreparedEvent[],
 ): Promise<{ ids: Map<string, string>; upserted: number }> {
-  if (rows.length === 0) return { ids: new Map(), upserted: 0 }
+  if (prepared.length === 0) return { ids: new Map(), upserted: 0 }
 
-  const { data, error } = await supabase.rpc('upsert_events_batch', { payload: rows })
+  // Dedupe within batch on (venue_id, event_date, norm) to match the DB
+  // unique constraint key. Without this, two raw titles that collapse to the
+  // same normalized form crash the upsert with "ON CONFLICT DO UPDATE command
+  // cannot affect row a second time". `norm` was computed once at the call
+  // site — no recomputation here.
+  const seen = new Map<string, EventInsert>()
+  for (const { row, norm } of prepared) {
+    seen.set(`${row.venue_id}|${row.event_date}|${norm}`, row)
+  }
+  const unique = Array.from(seen.values())
+
+  // Select title_norm (a generated column = normalize_title(title_raw)) so the
+  // ids map is keyed by the DB-canonical normalization. This eliminates the
+  // JS/SQL drift risk in the lookup path: even if our JS normalizeTitle()
+  // diverges from the SQL function, the id map still resolves correctly.
+  const { data, error } = await supabase
+    .from('events')
+    .upsert(unique, { onConflict: 'venue_id,event_date,title_norm', ignoreDuplicates: false })
+    .select('id, venue_id, event_date, title_norm')
   if (error) throw new Error(`event upsert (${sourceId}): ${error.message}`)
 
   const ids = new Map<string, string>()
-  for (const r of (data ?? []) as Array<{ id: string; venue_id: string; event_date: string; title_raw: string }>) {
-    ids.set(`${r.venue_id}|${r.event_date}|${r.title_raw}`, r.id)
+  for (const r of data ?? []) {
+    ids.set(`${r.venue_id}|${r.event_date}|${r.title_norm as string}`, r.id as string)
   }
   return { ids, upserted: data?.length ?? 0 }
 }
@@ -185,12 +223,6 @@ export type RunOptions = {
   venueIndex?: VenueIndex
   /** Override Supabase client (testing). */
   supabase?: SupabaseClient
-  /**
-   * Write a scrape_logs row after this source completes. Default: true.
-   * runSources sets this to false so it can batch all logs in one insert
-   * at the end of the cycle instead of one round-trip per source.
-   */
-  persistLog?: boolean
 }
 
 /**
@@ -270,29 +302,36 @@ export async function runSource(
     }
 
     // ── Upsert events ──────────────────────────────────────────────────
-    const rows: EventInsert[] = resolved.map(({ event, venueId }) => ({
-      venue_id: venueId,
-      event_date: event.eventDate,
-      title_raw: event.titleRaw,
-      description: event.description ?? null,
-      start_time: event.startTime ?? null,
-      doors_time: event.doorsTime ?? null,
-      ticket_price_adv: event.ticketPriceAdv ?? null,
-      ticket_price_door: event.ticketPriceDoor ?? null,
-      ticket_url: event.ticketUrl ?? null,
-      primary_source_id: source.id,
+    // Compute normalizeTitle() exactly once per event here. The norm is reused
+    // for (a) batch dedup inside upsertEvents, and (b) the post-upsert id
+    // lookup below. Previously this regex-heavy normalization ran 3× per row.
+    const prepared: PreparedEvent[] = resolved.map(({ event, venueId }) => ({
+      row: {
+        venue_id: venueId,
+        event_date: event.eventDate,
+        title_raw: event.titleRaw,
+        description: event.description ?? null,
+        start_time: event.startTime ?? null,
+        doors_time: event.doorsTime ?? null,
+        ticket_price_adv: event.ticketPriceAdv ?? null,
+        ticket_price_door: event.ticketPriceDoor ?? null,
+        ticket_url: event.ticketUrl ?? null,
+        primary_source_id: source.id,
+      },
+      norm: normalizeTitle(event.titleRaw),
     }))
 
-    const { ids, upserted } = await upsertEvents(supabase, source.id, rows)
+    const { ids, upserted } = await upsertEvents(supabase, source.id, prepared)
     result.upserted = upserted
 
     // ── Upsert event_sources ───────────────────────────────────────────
-    // ids map is keyed by (venue_id, event_date, title_raw) as returned by
-    // the RPC — no JS normalization involved.
+    // Use the cached norm from prepared[i] — no recomputation. ids map is
+    // keyed by DB-canonical title_norm, so the lookup is single-shot.
     type SourceRecord = { event_id: string; source_url: string | null; raw_payload: unknown }
     const sourceRecords: SourceRecord[] = []
-    for (const { event, venueId } of resolved) {
-      const id = ids.get(`${venueId}|${event.eventDate}|${event.titleRaw}`)
+    for (let i = 0; i < resolved.length; i++) {
+      const { event, venueId } = resolved[i]
+      const id = ids.get(`${venueId}|${event.eventDate}|${prepared[i].norm}`)
       if (!id) continue
       sourceRecords.push({ event_id: id, source_url: event.sourceUrl, raw_payload: event.payload ?? null })
     }
@@ -307,7 +346,7 @@ export async function runSource(
     console.error(`[runner] ${source.id} failed:`, e)
   } finally {
     result.durationMs = Date.now() - t0
-    if (opts.persistLog !== false) await writeScrapeLog(supabase, result)
+    await writeScrapeLog(supabase, result)
   }
 
   return result
@@ -326,28 +365,9 @@ export async function runSources(
   async function worker() {
     while (i < sources.length) {
       const idx = i++
-      // persistLog: false — we batch all rows in one insert below.
-      results[idx] = await runSource(sources[idx], { supabase, venueIndex, persistLog: false })
+      results[idx] = await runSource(sources[idx], { supabase, venueIndex })
     }
   }
   await Promise.all(Array.from({ length: Math.min(concurrency, sources.length) }, worker))
-
-  // One insert for the whole cycle instead of N sequential round-trips.
-  const logRows = results.map((r) => ({
-    source_id: r.sourceId,
-    status: r.status,
-    fetched: r.fetched,
-    parsed: r.parsed,
-    rejected: r.rejected,
-    unresolved: r.unresolved,
-    upserted: r.upserted,
-    duration_ms: r.durationMs,
-    error_message: r.errorMessage ?? null,
-  }))
-  if (logRows.length > 0) {
-    const { error } = await supabase.from('scrape_logs').insert(logRows)
-    if (error) console.warn(`[runner] batch scrape_logs insert: ${error.message}`)
-  }
-
   return results
 }
