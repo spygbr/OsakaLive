@@ -287,7 +287,7 @@ export async function runImageEnrichment(
   }))
   // Prioritise events that have actionable data sources so limit=N test runs
   // hit real candidates first: source_url > IG > nothing.
-  .sort((a, b) => {
+  .sort((a: PendingEvent, b: PendingEvent) => {
     const scoreA = a.source_url ? 2 : a.artists.some((ea) => ea.artist?.instagram_url) ? 1 : 0
     const scoreB = b.source_url ? 2 : b.artists.some((ea) => ea.artist?.instagram_url) ? 1 : 0
     return scoreB - scoreA
