@@ -11,62 +11,7 @@
 import { jstYear } from './source'
 import type { ParseResult, RawEvent, RejectedEvent } from './types'
 
-// ── HTML cleaning ─────────────────────────────────────────────────────────
-
-/**
- * Named entity → replacement character table. Used by ENTITY_WS_RE replacer.
- * Keys are lowercase so the /gi regex can match any casing without branching.
- */
-const ENTITY_MAP: Record<string, string> = {
-  '&amp;':   '&',
-  '&lt;':    '<',
-  '&gt;':    '>',
-  '&quot;':  '"',
-  '&apos;':  "'",
-  '&nbsp;':  ' ',
-  '&yen;':   '¥',
-  '&#8230;': '…',
-}
-
-/**
- * Pass 1 (of 3 tag passes): <br> and block-level closing tags → newline.
- * Kept as a separate regex from TICKET_TAG_RE so the simpler pattern can be
- * JIT-compiled to a faster DFA path.
- */
-const BR_BLOCK_RE =
-  /<br\s*\/?>|<\/(?:div|li|p|tr|td|th|h[1-6]|section|article|header|footer|span)[^>]*>/gi
-
-/**
- * Pass 2 (of 3 tag passes): inject ticket hrefs then strip remaining tags.
- * Capture group 1 is defined only when the <a href="ticket-url"> branch fires.
- */
-const TICKET_TAG_RE = new RegExp(
-  '<a\\s[^>]*href="(https?:\\/\\/(?:eplus\\.jp|t\\.livepocket\\.jp|l-tike\\.com|pia\\.jp|ticket\\.lawson\\.co\\.jp)[^"]*)"[^>]*>|' +
-  '<[^>]+>',
-  'gi',
-)
-
-/**
- * Pass 3: decode all HTML entities and collapse horizontal whitespace runs.
- * Specific named entities come before the catch-all &#\d+; / &[a-z]{2,8}; so
- * &#8230; is matched before the generic numeric form.
- */
-const ENTITY_WS_RE =
-  /&amp;|&lt;|&gt;|&quot;|&apos;|&nbsp;|&yen;|&#8230;|&#\d+;|&[a-z]{2,8};|[ \t]{2,}/gi
-
-function replaceTicketTag(match: string, ticketHref: string | undefined): string {
-  return ticketHref !== undefined ? ` ${ticketHref} ` : ' '
-}
-
-function replaceEntityWs(match: string): string {
-  if (match[0] === '&') {
-    const mapped = ENTITY_MAP[match.toLowerCase()]
-    return mapped !== undefined ? mapped : ' '
-  }
-  return ' ' // horizontal whitespace run
-}
-
-// ── Regex / helpers ────────────────────────────────────────────────────────
+// ── Regex / helpers (copied verbatim from v1 parse.ts) ─────────────────────
 
 const JP_DATE_RE = /(?:(\d{4})[年\/\-\.])?(\d{1,2})[月\/\-\.](\d{1,2})[日]?/
 const OPEN_RE    = /(?:open|開場|open:|open：)\s*(\d{1,2}:\d{2})/i
@@ -140,15 +85,27 @@ export function parseVenueSchedule(html: string, sourceUrl: string): ParseResult
   const events: RawEvent[] = []
   const rejected: RejectedEvent[] = []
 
-  // 5 passes instead of 15; reduces string allocations by ~67%.
-  // Scripts/styles are stripped first (separate pass) because they discard the
-  // entire element contents, not just the tags.
   const cleaned = html
     .replace(/<script[\s\S]*?<\/script>/gi, '')
     .replace(/<style[\s\S]*?<\/style>/gi, '')
-    .replace(BR_BLOCK_RE, '\n')
-    .replace(TICKET_TAG_RE, replaceTicketTag)
-    .replace(ENTITY_WS_RE, replaceEntityWs)
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(?:div|li|p|tr|td|th|h[1-6]|section|article|header|footer|span)[^>]*>/gi, '\n')
+    // Inject ticket-page hrefs into the text stream BEFORE stripping tags so
+    // they survive into per-event context windows (TICKET_URL_RE won't find
+    // them otherwise once the <a> markup is gone).
+    .replace(/<a\s[^>]*href="(https?:\/\/(?:eplus\.jp|t\.livepocket\.jp|l-tike\.com|pia\.jp|ticket\.lawson\.co\.jp)[^"]*)"/gi, ' $1 ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&yen;/gi, '¥')
+    .replace(/&quot;/gi, '"')
+    .replace(/&apos;/gi, "'")
+    .replace(/&#8230;/g, '…')
+    .replace(/&#\d+;/g, ' ')
+    .replace(/&[a-z]{2,8};/gi, ' ')
+    .replace(/[ \t]{2,}/g, ' ')
 
   const lines = cleaned
     .split(/\r?\n|\s{3,}/)
