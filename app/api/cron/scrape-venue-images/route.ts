@@ -3,7 +3,11 @@
  *
  * Automated venue image enrichment.
  * Processes only venues where image_url IS NULL.
- * Sources (priority): og:image → twitter:image → first large <img>
+ * Sources (priority):
+ *   1. Google Places Photos API  (requires GOOGLE_PLACES_API_KEY)
+ *   2. og:image from venue website
+ *   3. twitter:image from venue website
+ *   4. First large <img> from venue website
  * Images are uploaded to Supabase Storage (venue-images bucket)
  * and the CDN URL is written back to venues.image_url.
  *
@@ -20,18 +24,23 @@ export const maxDuration = 60
 export const preferredRegion = 'hnd1'
 
 // ── Config ─────────────────────────────────────────────────────────────────────
-const OL_UA         = 'OsakaLive/0.1 (https://osaka-live.net; diku@genkanconsulting.com)'
-const MAX_BYTES     = 8 * 1024 * 1024   // 8 MB limit
-const FETCH_TIMEOUT = 15_000            // 15 s per network call
-const MIN_IMG_WIDTH = 300               // ignore images smaller than this
+const OL_UA          = 'OsakaLive/0.1 (https://osaka-live.net; diku@genkanconsulting.com)'
+const MAX_BYTES      = 8 * 1024 * 1024   // 8 MB limit
+const FETCH_TIMEOUT  = 15_000            // 15 s per network call
+const MIN_IMG_WIDTH  = 300               // ignore images smaller than this
 const STORAGE_BUCKET = 'venue-images'
-const SKIP_PATTERN  = /icon|logo|favicon|sprite|pixel|blank|loading|placeholder/i
+const SKIP_PATTERN   = /icon|logo|favicon|sprite|pixel|blank|loading|placeholder/i
+
+// Osaka centre for Places location bias
+const OSAKA_LAT = 34.6937
+const OSAKA_LNG = 135.5023
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface Venue {
   id:          string
   slug:        string
   name_en:     string
+  name_ja:     string
   website_url: string | null
 }
 
@@ -51,12 +60,96 @@ function getAdmin() {
   return createClient<any>(url, key, { auth: { persistSession: false } })
 }
 
-// ── Image extraction ───────────────────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────────────────────
 function resolveUrl(raw: string, base: string): string | null {
   try { return new URL(raw, base).href } catch { return null }
 }
 
-async function findImageUrl(
+function extFromContentType(ct: string, url: string): string {
+  if (ct.includes('png'))  return 'png'
+  if (ct.includes('webp')) return 'webp'
+  if (ct.includes('gif'))  return 'gif'
+  return url.match(/\.(\w{3,4})(?:\?|$)/)?.[1]?.toLowerCase() ?? 'jpg'
+}
+
+// ── Source 1: Google Places Photos ────────────────────────────────────────────
+async function searchGooglePlaces(venue: Venue): Promise<{ imageUrl: string; source: string } | null> {
+  const apiKey = process.env.GOOGLE_PLACES_API_KEY
+  if (!apiKey) return null
+
+  const queries = [
+    venue.name_ja && venue.name_ja !== venue.name_en
+      ? `${venue.name_ja} 大阪`
+      : null,
+    `${venue.name_en} Osaka live house`,
+  ].filter(Boolean) as string[]
+
+  for (const query of queries) {
+    try {
+      const searchRes = await fetch(
+        'https://places.googleapis.com/v1/places:searchText',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type':     'application/json',
+            'X-Goog-Api-Key':   apiKey,
+            'X-Goog-FieldMask': 'places.id,places.displayName,places.photos',
+          },
+          body: JSON.stringify({
+            textQuery:    query,
+            languageCode: 'ja',
+            locationBias: {
+              circle: {
+                center: { latitude: OSAKA_LAT, longitude: OSAKA_LNG },
+                radius: 15000,
+              },
+            },
+            maxResultCount: 1,
+          }),
+          signal: AbortSignal.timeout(FETCH_TIMEOUT),
+        },
+      )
+
+      if (!searchRes.ok) continue
+
+      const searchJson = await searchRes.json() as {
+        places?: {
+          id:          string
+          displayName: { text: string }
+          photos?:     { name: string }[]
+        }[]
+      }
+
+      const place = searchJson.places?.[0]
+      if (!place?.photos?.length) continue
+
+      const photoName = place.photos[0].name
+      const photoUrl  =
+        `https://places.googleapis.com/v1/${photoName}/media` +
+        `?maxHeightPx=1200&maxWidthPx=1600&key=${apiKey}`
+
+      const photoRes = await fetch(photoUrl, {
+        redirect: 'follow',
+        headers:  { 'User-Agent': OL_UA },
+        signal:   AbortSignal.timeout(FETCH_TIMEOUT),
+      })
+
+      if (!photoRes.ok) continue
+      const ct = photoRes.headers.get('content-type') ?? ''
+      if (!ct.startsWith('image/')) continue
+
+      console.log(`[venue-images] google-places hit: ${venue.slug} — "${place.displayName.text}"`)
+      return { imageUrl: photoRes.url, source: 'google-places' }
+    } catch {
+      // try next query
+    }
+  }
+
+  return null
+}
+
+// ── Sources 2–4: Website scraping ─────────────────────────────────────────────
+async function findImageFromWebsite(
   venue: Venue,
 ): Promise<{ imageUrl: string; source: string } | null> {
   if (!venue.website_url) return null
@@ -80,7 +173,7 @@ async function findImageUrl(
 
   const base = venue.website_url
 
-  // 1. og:image
+  // og:image
   const og =
     html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)?.[1] ??
     html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i)?.[1]
@@ -89,7 +182,7 @@ async function findImageUrl(
     if (resolved) return { imageUrl: resolved, source: 'og:image' }
   }
 
-  // 2. twitter:image
+  // twitter:image
   const tw =
     html.match(/<meta[^>]+(?:name|property)=["']twitter:image["'][^>]+content=["']([^"']+)["']/i)?.[1] ??
     html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+(?:name|property)=["']twitter:image["']/i)?.[1]
@@ -98,7 +191,7 @@ async function findImageUrl(
     if (resolved) return { imageUrl: resolved, source: 'twitter:image' }
   }
 
-  // 3. First large <img> (skip icons/logos/tiny images)
+  // First large <img>
   for (const m of html.matchAll(/<img\b[^>]+>/gi)) {
     const tag = m[0]
     const src = tag.match(/\bsrc=["']([^"']+)["']/i)?.[1]?.trim()
@@ -112,14 +205,19 @@ async function findImageUrl(
   return null
 }
 
-// ── Image download + Storage upload ───────────────────────────────────────────
-function extFromContentType(ct: string, url: string): string {
-  if (ct.includes('png'))  return 'png'
-  if (ct.includes('webp')) return 'webp'
-  if (ct.includes('gif'))  return 'gif'
-  return url.match(/\.(\w{3,4})(?:\?|$)/)?.[1]?.toLowerCase() ?? 'jpg'
+// ── Combined: try all sources ──────────────────────────────────────────────────
+async function findImageUrl(
+  venue: Venue,
+): Promise<{ imageUrl: string; source: string } | null> {
+  // 1. Google Places (best quality, works even without a website)
+  const placesResult = await searchGooglePlaces(venue)
+  if (placesResult) return placesResult
+
+  // 2–4. Website scraping fallback
+  return findImageFromWebsite(venue)
 }
 
+// ── Image download + Storage upload ───────────────────────────────────────────
 async function uploadAndSave(
   supabase: ReturnType<typeof getAdmin>,
   venue: Venue,
@@ -142,8 +240,8 @@ async function uploadAndSave(
   let ext: string
   try {
     const res = await fetch(imageUrl, {
-      headers: { 'User-Agent': OL_UA },
-      signal:  AbortSignal.timeout(FETCH_TIMEOUT),
+      headers:  { 'User-Agent': OL_UA },
+      signal:   AbortSignal.timeout(FETCH_TIMEOUT),
       redirect: 'follow',
     })
     if (!res.ok) return 'error'
@@ -199,7 +297,7 @@ export async function GET(req: NextRequest) {
   // Fetch venues with no image
   const { data, error } = await supabase
     .from('venues')
-    .select('id, slug, name_en, website_url')
+    .select('id, slug, name_en, name_ja, website_url')
     .is('image_url', null)
     .order('name_en')
 
@@ -218,7 +316,11 @@ export async function GET(req: NextRequest) {
       const found = await findImageUrl(venue)
 
       if (!found) {
-        results.push({ slug: venue.slug, status: 'miss', reason: venue.website_url ? 'no image found' : 'no website' })
+        results.push({
+          slug:   venue.slug,
+          status: 'miss',
+          reason: venue.website_url ? 'no image found' : 'no website or places result',
+        })
         continue
       }
 
