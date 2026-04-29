@@ -7,6 +7,8 @@ export type Json =
   | Json[]
 
 export type Database = {
+  // Allows to automatically instantiate createClient with right options
+  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
@@ -116,11 +118,13 @@ export type Database = {
         Row: {
           bio_en: string | null
           bio_ja: string | null
+          bio_source: string | null
           created_at: string
           genre_id: number | null
           id: string
           image_url: string | null
           instagram_url: string | null
+          music_url: string | null
           name_en: string
           name_ja: string | null
           slug: string
@@ -130,11 +134,13 @@ export type Database = {
         Insert: {
           bio_en?: string | null
           bio_ja?: string | null
+          bio_source?: string | null
           created_at?: string
           genre_id?: number | null
           id?: string
           image_url?: string | null
           instagram_url?: string | null
+          music_url?: string | null
           name_en: string
           name_ja?: string | null
           slug: string
@@ -144,11 +150,13 @@ export type Database = {
         Update: {
           bio_en?: string | null
           bio_ja?: string | null
+          bio_source?: string | null
           created_at?: string
           genre_id?: number | null
           id?: string
           image_url?: string | null
           instagram_url?: string | null
+          music_url?: string | null
           name_en?: string
           name_ja?: string | null
           slug?: string
@@ -210,21 +218,21 @@ export type Database = {
           raw_payload: Json | null
           scraped_at: string
           source_id: string
-          source_url: string
+          source_url: string | null
         }
         Insert: {
           event_id: string
           raw_payload?: Json | null
           scraped_at?: string
           source_id: string
-          source_url: string
+          source_url?: string | null
         }
         Update: {
           event_id?: string
           raw_payload?: Json | null
           scraped_at?: string
           source_id?: string
-          source_url?: string
+          source_url?: string | null
         }
         Relationships: [
           {
@@ -566,6 +574,15 @@ export type Database = {
     }
     Functions: {
       normalize_title: { Args: { input: string }; Returns: string }
+      upsert_events_batch: {
+        Args: { payload: Json }
+        Returns: {
+          event_date: string
+          id: string
+          title_raw: string
+          venue_id: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
