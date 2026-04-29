@@ -164,6 +164,37 @@ npx tsx scripts/apply-manual-image-overrides.ts
 
 ---
 
+### Step 6 — Music URL enrichment
+
+**Script:** `scripts/enrich-music-urls.ts`
+
+Finds and writes `music_url` for all artists where it is NULL. Searches Spotify,
+Bandcamp, Deezer, and Apple Music in parallel per artist, scores each hit by name
+similarity, then picks the best match from the highest-priority platform
+(Spotify > Bandcamp > Deezer > Apple Music).
+
+```bash
+npx tsx scripts/enrich-music-urls.ts               # full run — all missing music_url
+npx tsx scripts/enrich-music-urls.ts --dry-run     # preview without writes
+npx tsx scripts/enrich-music-urls.ts --limit 20
+npx tsx scripts/enrich-music-urls.ts --slugs boris,merzbow
+npx tsx scripts/enrich-music-urls.ts --force       # overwrite existing music_url
+npx tsx scripts/enrich-music-urls.ts --sources spotify,bandcamp
+npx tsx scripts/enrich-music-urls.ts --threshold 0.65
+```
+
+After each run, `tmp/enrich-music-urls/report.json` is written, plus a
+`miss-list.csv` of artists not found automatically. Fill the `manual_music_url`
+column in that CSV and apply via the Supabase table editor or a SQL UPDATE.
+
+Requires `SPOTIFY_CLIENT_ID` / `SPOTIFY_CLIENT_SECRET` in `.env.local` to enable
+the Spotify source (highest-priority). Deezer, Bandcamp, and Apple Music work
+without credentials.
+
+**Frequency:** After each Step 5 (enrich-artists) run. Safe to re-run at any time.
+
+---
+
 ## Part 3 — Maintenance
 
 ### Name cleanup
@@ -188,8 +219,9 @@ No dry-run flag — review the console output carefully. Run whenever dirty name
 3. [Human review in Supabase]     approve / reject candidates
 4. promote-artists.ts             push to live artists table
 5. enrich-artists.ts              image + genre + website + instagram (single pass)
+6. enrich-music-urls.ts           Spotify / Bandcamp / Deezer / Apple Music links
 ```
 
-Step 5 can be re-run independently at any time without re-running the full pipeline.
+Steps 5 and 6 can be re-run independently at any time without re-running the full pipeline.
 
 **Archive:** superseded PoC scripts are in `scripts/archive/` for reference.
