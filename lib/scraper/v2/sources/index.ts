@@ -1,12 +1,16 @@
 /**
  * Source registry.
  *
- * loadSources() reads the `sources` table and builds Source instances:
- *   - kind='aggregator' → look up by id in AGGREGATOR_REGISTRY
- *   - kind='venue'      → instantiate VenueScheduleSource from the DB row
+ * loadSources() reads the `sources` table and builds Source instances via
+ * SOURCE_REGISTRY. Lookup order:
+ *   1. Registry hit (handles both aggregators and custom-parser venues)
+ *   2. kind='venue' with no registry entry → VenueScheduleSource default
+ *   3. Otherwise → warn and skip
  *
- * Adding a new aggregator: write the class, register it here. That's it.
- * Adding a new venue: just insert a row in `sources` and `venues` — no code.
+ * Adding a new aggregator: write the class, add an entry here. That's it.
+ * Adding a new venue with default parsing: insert a row in `sources` and
+ *   `venues` — no code needed.
+ * Adding a venue with custom parsing: write the class, add an entry here.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -19,28 +23,6 @@ import { VenueScheduleSource } from './venue'
 import { ClubJouleSource } from './club-joule'
 import { DropSource } from './drop'
 
-/** id → constructor for hand-coded aggregator sources. */
-const AGGREGATOR_REGISTRY: Record<string, () => Source> = {
-  punx:      () => new PunxSource(),
-  icegrills: () => new IceGrillsSource(),
-  udiscover: () => new UDiscoverSource(),
-  unionway:  () => new UnionwaySource(),
-}
-
-/**
- * id → constructor for venue sources that need custom parsing instead of the
- * generic VenueScheduleSource. The DB row still drives baseUrl + venueId; the
- * override just swaps the parser. Add a venue here when its HTML structure
- * defeats parseVenueSchedule().
- */
-const VENUE_OVERRIDES: Record<
-  string,
-  (args: { baseUrl: string; venueId: string }) => Source
-> = {
-  'venue:club-joule': (a) => new ClubJouleSource(a),
-  'venue:drop':       (a) => new DropSource(a),
-}
-
 type SourceRowDb = {
   id: string
   kind: 'venue' | 'aggregator'
@@ -48,6 +30,22 @@ type SourceRowDb = {
   venue_id: string | null
   base_url: string
   enabled: boolean
+}
+
+/**
+ * Unified registry keyed by DB source id. Each factory receives the full DB
+ * row so both aggregators (no row data needed) and custom-parser venues (need
+ * baseUrl + venueId) can be handled in the same map.
+ */
+const SOURCE_REGISTRY: Record<string, (row: SourceRowDb) => Source> = {
+  // Aggregators
+  punx:             (_row) => new PunxSource(),
+  icegrills:        (_row) => new IceGrillsSource(),
+  udiscover:        (_row) => new UDiscoverSource(),
+  unionway:         (_row) => new UnionwaySource(),
+  // Custom-parser venue overrides
+  'venue:club-joule': (row) => new ClubJouleSource({ baseUrl: row.base_url, venueId: row.venue_id! }),
+  'venue:drop':       (row) => new DropSource({ baseUrl: row.base_url, venueId: row.venue_id! }),
 }
 
 export async function loadSources(supabase: SupabaseClient): Promise<Source[]> {
@@ -59,29 +57,22 @@ export async function loadSources(supabase: SupabaseClient): Promise<Source[]> {
 
   const out: Source[] = []
   for (const row of (data ?? []) as SourceRowDb[]) {
-    if (row.kind === 'aggregator') {
-      const ctor = AGGREGATOR_REGISTRY[row.id]
-      if (!ctor) {
-        console.warn(`[v2] unknown aggregator id "${row.id}" — skipping`)
-        continue
-      }
-      out.push(ctor())
+    const factory = SOURCE_REGISTRY[row.id]
+    if (factory) {
+      out.push(factory(row))
     } else if (row.kind === 'venue') {
       if (!row.venue_id) {
         console.warn(`[v2] venue source ${row.id} missing venue_id — skipping`)
         continue
       }
-      const override = VENUE_OVERRIDES[row.id]
-      if (override) {
-        out.push(override({ baseUrl: row.base_url, venueId: row.venue_id }))
-      } else {
-        out.push(new VenueScheduleSource({
-          id: row.id,
-          displayName: row.display_name,
-          baseUrl: row.base_url,
-          venueId: row.venue_id,
-        }))
-      }
+      out.push(new VenueScheduleSource({
+        id: row.id,
+        displayName: row.display_name,
+        baseUrl: row.base_url,
+        venueId: row.venue_id,
+      }))
+    } else {
+      console.warn(`[v2] unknown source id "${row.id}" (kind=${row.kind}) — skipping`)
     }
   }
   return out
