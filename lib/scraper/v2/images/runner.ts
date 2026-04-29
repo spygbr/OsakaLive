@@ -285,6 +285,13 @@ export async function runImageEnrichment(
     artists:        (row.artists ?? [])
       .sort((a: any, b: any) => (a.billing_order ?? 0) - (b.billing_order ?? 0)),
   }))
+  // Prioritise events that have actionable data sources so limit=N test runs
+  // hit real candidates first: source_url > IG > nothing.
+  .sort((a, b) => {
+    const scoreA = a.source_url ? 2 : a.artists.some((ea) => ea.artist?.instagram_url) ? 1 : 0
+    const scoreB = b.source_url ? 2 : b.artists.some((ea) => ea.artist?.instagram_url) ? 1 : 0
+    return scoreB - scoreA
+  })
 
   console.log(`[image-runner] ${events.length} pending event(s)`)
 
