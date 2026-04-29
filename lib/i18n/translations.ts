@@ -4,6 +4,7 @@ export const translations = {
   // ── Navigation ──────────────────────────────────────────────────────────
   nav_home:      { en: 'HOME',      ja: 'ホーム' },
   nav_calendar:  { en: 'CALENDAR',  ja: 'カレンダー' },
+  nav_events:    { en: 'EVENTS',    ja: 'イベント' },
   nav_venues:    { en: 'VENUES',    ja: '会場' },
   nav_artists:   { en: 'ARTISTS',   ja: 'アーティスト' },
   nav_tickets:   { en: 'TICKETS',   ja: 'チケット' },
@@ -109,6 +110,7 @@ export const translations = {
   // ── Breadcrumbs ──────────────────────────────────────────────────────────
   breadcrumb_root:         { en: 'ROOT',                      ja: 'ルート' },
   breadcrumb_events:       { en: 'EVENTS',                    ja: 'イベント' },
+  breadcrumb_venues:       { en: 'VENUES',                    ja: '会場' },
   breadcrumb_artists:      { en: 'ARTISTS',                   ja: 'アーティスト' },
   breadcrumb_filtered:     { en: '— FILTERED',                ja: '— フィルター中' },
 

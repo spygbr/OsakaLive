@@ -87,7 +87,7 @@ export default async function VenueDetailPage({
         <div className="hidden md:flex items-center gap-2 px-8 py-4 border-b border-outline-variant bg-surface-container-lowest font-mono text-[10px] uppercase tracking-widest text-outline">
           <Link href="/" className="hover:text-primary transition-colors">ROOT</Link>
           <ChevronRight className="w-3 h-3" />
-          <span className="hover:text-primary transition-colors">VENUES</span>
+          <Link href="/venues" className="hover:text-primary transition-colors">VENUES</Link>
           <ChevronRight className="w-3 h-3" />
           <span className="text-primary">{venue.name_en}</span>
         </div>

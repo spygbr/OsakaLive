@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Search, Home, Calendar, MapPin, User } from "lucide-react";
+import { Search, Home, Calendar, MapPin, User, Ticket } from "lucide-react";
 import { useLang } from "@/lib/i18n/LangProvider";
 import { useFilterDrawer } from "@/lib/filter-drawer-context";
 import { SearchOverlay } from "@/components/SearchOverlay";
@@ -60,6 +60,12 @@ export function TopNav() {
           <Link
             href="/search"
             className={`${pathname === "/search" ? "text-primary border-b-2 border-primary pb-1 translate-y-[1px]" : "text-[#cecece] hover:text-primary transition-colors"}`}
+          >
+            {t("nav_events")}
+          </Link>
+          <Link
+            href="/venues"
+            className={`${pathname.startsWith("/venues") ? "text-primary border-b-2 border-primary pb-1 translate-y-[1px]" : "text-[#cecece] hover:text-primary transition-colors"}`}
           >
             {t("nav_venues")}
           </Link>
@@ -144,6 +150,13 @@ export function BottomNav() {
       <Link
         href="/search"
         className={`flex flex-col items-center justify-center p-1 flex-1 transition-colors ${pathname === "/search" ? "bg-primary-container text-black" : "text-primary-container hover:bg-red-900/40 active:bg-red-800"}`}
+      >
+        <Ticket className="w-6 h-6 mb-1" />
+        <span>{t("nav_events")}</span>
+      </Link>
+      <Link
+        href="/venues"
+        className={`flex flex-col items-center justify-center p-1 flex-1 transition-colors ${pathname.startsWith("/venues") ? "bg-primary-container text-black" : "text-primary-container hover:bg-red-900/40 active:bg-red-800"}`}
       >
         <MapPin className="w-6 h-6 mb-1" />
         <span>{t("nav_venues")}</span>
