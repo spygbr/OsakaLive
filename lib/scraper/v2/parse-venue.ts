@@ -13,12 +13,12 @@ import type { ParseResult, RawEvent, RejectedEvent } from './types'
 
 // ── Regex / helpers (copied verbatim from v1 parse.ts) ─────────────────────
 
-const JP_DATE_RE = /(?:(\d{4})[年\/\-\.])?(\d{1,2})[月\/\-\.](\d{1,2})[日]?/g
+const JP_DATE_RE = /(?:(\d{4})[年\/\-\.])?(\d{1,2})[月\/\-\.](\d{1,2})[日]?/
 const OPEN_RE    = /(?:open|開場|open:|open：)\s*(\d{1,2}:\d{2})/i
 const START_RE   = /(?:start|開演|start:|start：)\s*(\d{1,2}:\d{2})/i
 const PRICE_RE   = /(?:[¥￥]\s*(\d[\d,]+)|(\d[\d,]+)\s*円)/gi
 const TICKET_URL_RE =
-  /https?:\/\/(?:eplus\.jp|t\.livepocket\.jp|l-tike\.com|pia\.jp|ticket\.lawson\.co\.jp)[^\s"'<>]*/gi
+  /https?:\/\/(?:eplus\.jp|t\.livepocket\.jp|l-tike\.com|pia\.jp|ticket\.lawson\.co\.jp)[^\s"'<>]*/i
 
 const DOW_EN_RE      = /^[\(\[（【]?\s*(?:mon|tue|wed|thu|fri|sat|sun)\s*[\)\]）】]?\.?$/i
 const DOW_JA_RE      = /^[\(\[（【]?\s*[月火水木金土日]\s*[\)\]）】]?$/
@@ -114,7 +114,6 @@ export function parseVenueSchedule(html: string, sourceUrl: string): ParseResult
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]
-    JP_DATE_RE.lastIndex = 0
     const dateMatch = JP_DATE_RE.exec(line)
     if (!dateMatch) continue
 
@@ -130,7 +129,6 @@ export function parseVenueSchedule(html: string, sourceUrl: string): ParseResult
     const lookAhead = [line, ...lines.slice(i + 1, i + 7)]
     for (const raw of lookAhead) {
       if (titleFound) {
-        JP_DATE_RE.lastIndex = 0
         if (JP_DATE_RE.test(raw)) break
       }
       const candidate = cleanTitle(raw)
@@ -149,7 +147,6 @@ export function parseVenueSchedule(html: string, sourceUrl: string): ParseResult
     // ── Time/price context ──────────────────────────────────────────────
     let ctxEnd = Math.min(lines.length, i + 10)
     for (let k = i + 1; k < ctxEnd; k++) {
-      JP_DATE_RE.lastIndex = 0
       if (k > i + 1 && JP_DATE_RE.test(lines[k])) { ctxEnd = k; break }
     }
     const ctx = lines.slice(Math.max(0, i - 2), ctxEnd).join(' ')
@@ -165,7 +162,6 @@ export function parseVenueSchedule(html: string, sourceUrl: string): ParseResult
     }
     // Scope ticket URL search to this event's context window, not the whole
     // page — prevents a single ticket link from leaking onto every event.
-    TICKET_URL_RE.lastIndex = 0
     const ticketMatch = TICKET_URL_RE.exec(ctx)
 
     const description = lineup.length > 0
