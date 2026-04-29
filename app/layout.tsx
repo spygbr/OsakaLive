@@ -9,6 +9,7 @@ import { FilterDrawerProvider } from "@/lib/filter-drawer-context";
 import { MobileFilterDrawer } from "@/components/MobileFilterDrawer";
 import { getLang } from "@/lib/i18n/server";
 import { getAreas, getGenresWithCounts, getLastScrapedAt } from "@/lib/supabase/queries";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
@@ -111,6 +112,7 @@ export default async function RootLayout({
             <BottomNav />
           </FilterDrawerProvider>
         </LangProvider>
+        <SpeedInsights />
       </body>
     </html>
   );
