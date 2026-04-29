@@ -9,7 +9,6 @@ import { createHash } from 'node:crypto'
 import type { FetchedPage } from './types'
 
 const DEFAULT_TIMEOUT_MS = 15_000
-const RETRY_AFTER_CAP_MS = 30_000
 // Plain desktop-Chrome UA. Some venues (banana-hall) WAF-block anything with
 // "bot" in the User-Agent string. We're polite — low rate, robots.txt-respecting
 // in spirit — but identifying as a bot trips overzealous filters.
@@ -26,21 +25,6 @@ export type FetchOptions = {
   headers?: Record<string, string>
 }
 
-/** Parse Retry-After header → milliseconds, capped at RETRY_AFTER_CAP_MS. */
-function parseRetryAfterMs(header: string | null): number {
-  if (!header) return 800
-  const secs = Number(header.trim())
-  if (!Number.isNaN(secs) && secs > 0) {
-    return Math.min(secs * 1000, RETRY_AFTER_CAP_MS)
-  }
-  // HTTP-date format
-  const date = Date.parse(header)
-  if (!Number.isNaN(date)) {
-    return Math.min(Math.max(date - Date.now(), 0), RETRY_AFTER_CAP_MS)
-  }
-  return 800
-}
-
 export async function fetchPage(
   url: string,
   opts: FetchOptions = {},
@@ -54,11 +38,10 @@ export async function fetchPage(
     ...opts.headers,
   }
 
-  // Up to 3 attempts for 429/503; 2 attempts for transient network errors.
-  // Respects Retry-After header on 429/503, falls back to 800ms otherwise.
+  // One retry with short backoff — covers transient TCP/TLS hiccups on JP hosts
+  // without making a flaky source block the whole cron for ~30s.
   let lastErr: unknown
-  const maxAttempts = 3
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+  for (let attempt = 0; attempt < 2; attempt++) {
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? DEFAULT_TIMEOUT_MS)
     try {
@@ -74,17 +57,6 @@ export async function fetchPage(
           notModified: true,
         }
       }
-
-      // 429 / 503 — rate-limited or temporarily unavailable: honour Retry-After.
-      if (res.status === 429 || res.status === 503) {
-        if (attempt < maxAttempts - 1) {
-          const waitMs = parseRetryAfterMs(res.headers.get('retry-after'))
-          await new Promise((r) => setTimeout(r, waitMs))
-          continue
-        }
-        throw new Error(`HTTP ${res.status} ${res.statusText}`)
-      }
-
       if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`)
 
       const body = await res.text()
@@ -98,12 +70,10 @@ export async function fetchPage(
       }
     } catch (e) {
       lastErr = e
-      // Don't retry HTTP-status errors (already thrown above for non-429/503).
+      // Don't retry HTTP-status errors (4xx/5xx) — those won't change.
       const msg = (e as Error).message ?? ''
       if (msg.startsWith('HTTP ')) throw e
-      // Network/timeout errors: one retry with fixed 800ms backoff.
       if (attempt === 0) await new Promise((r) => setTimeout(r, 800))
-      else break
     } finally {
       clearTimeout(timer)
     }
