@@ -1,13 +1,9 @@
 {
   "installCommand": "npm install --no-package-lock",
   "crons": [
-    {
-      "path": "/api/cron/scrape-events",
-      "schedule": "0 17 * * *"
-    },
-    {
-      "path": "/api/cron/scrape-venue-images",
-      "schedule": "0 4 * * 0"
-    }
+    { "path": "/api/cron/scrape-events",   "schedule": "0 17 * * *"  },
+    { "path": "/api/cron/scrape-venue-images", "schedule": "0 4 * * 0" },
+    { "path": "/api/cron/enrich-artists",  "schedule": "30 18 * * *" },
+    { "path": "/api/cron/slugify-artists", "schedule": "0 19 * * 0"  }
   ]
 }

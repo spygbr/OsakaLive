@@ -14,13 +14,11 @@
  *        https://osaka-live.vercel.app/api/cron/promote-artists
  */
 
-import { after, type NextRequest } from 'next/server'
-import { NextResponse } from 'next/server'
+import { type NextRequest, NextResponse } from 'next/server'
 import {
   getAdminClient,
   parseBilingualName,
   uniqueSlug,
-  triggerCronStep,
 } from '@/lib/pipeline/artist-pipeline'
 
 export const maxDuration = 60
@@ -61,9 +59,7 @@ export async function GET(req: NextRequest) {
     })
 
     if (candidates.length === 0) {
-      const summary = { ok: true, created: 0, reused: 0, links: 0, message: 'No candidates to promote' }
-      after(() => triggerCronStep('/api/cron/enrich-artists', process.env.CRON_SECRET))
-      return NextResponse.json(summary)
+      return NextResponse.json({ ok: true, created: 0, reused: 0, links: 0, message: 'No candidates to promote' })
     }
 
     // Deduplicate by name_norm
@@ -167,9 +163,6 @@ export async function GET(req: NextRequest) {
       marked: candidatesMarked,
     }
     console.log('[cron] promote-artists:', JSON.stringify(summary))
-
-    after(() => triggerCronStep('/api/cron/enrich-artists', process.env.CRON_SECRET))
-
     return NextResponse.json(summary)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)

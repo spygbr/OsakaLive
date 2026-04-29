@@ -17,9 +17,8 @@
  *        https://osaka-live.vercel.app/api/cron/enrich-artists
  */
 
-import { after, type NextRequest } from 'next/server'
-import { NextResponse } from 'next/server'
-import { getAdminClient, triggerCronStep } from '@/lib/pipeline/artist-pipeline'
+import { type NextRequest, NextResponse } from 'next/server'
+import { getAdminClient } from '@/lib/pipeline/artist-pipeline'
 
 export const maxDuration = 60
 export const preferredRegion = 'hnd1'
@@ -150,9 +149,7 @@ export async function GET(req: NextRequest) {
 
     if (error) throw new Error(`load artists: ${error.message}`)
     if (!artists || artists.length === 0) {
-      const summary = { ok: true, processed: 0, message: 'No artists need enrichment' }
-      after(() => triggerCronStep('/api/cron/slugify-artists', process.env.CRON_SECRET))
-      return NextResponse.json(summary)
+      return NextResponse.json({ ok: true, processed: 0, message: 'No artists need enrichment' })
     }
 
     let enriched = 0
@@ -212,9 +209,6 @@ export async function GET(req: NextRequest) {
 
     const summary = { ok: true, processed: artists.length, enriched, skipped }
     console.log('[cron] enrich-artists:', JSON.stringify(summary))
-
-    after(() => triggerCronStep('/api/cron/slugify-artists', process.env.CRON_SECRET))
-
     return NextResponse.json(summary)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
