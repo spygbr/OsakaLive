@@ -160,13 +160,13 @@ export default async function Home() {
                     href={`/event/${event.slug}`}
                     className="flex hover:bg-surface-container transition-colors group"
                   >
-                    <div className="w-24 h-24 bg-surface-container-highest shrink-0 overflow-hidden grayscale group-hover:grayscale-0 relative">
+                    <div className="w-24 h-24 bg-surface-container-highest shrink-0 overflow-hidden relative">
                       <Image
-                        src={placeholderImage(event.slug, 200, 200)}
+                        src={event.image_url ?? placeholderImage(event.slug, 200, 200)}
                         alt={title(event)}
                         fill
-                        className="object-cover"
-                        unoptimized
+                        className={`object-cover ${event.image_url ? '' : 'grayscale group-hover:grayscale-0'}`}
+                        unoptimized={!event.image_url}
                       />
                     </div>
                     <div className="flex-1 p-3 flex flex-col justify-center">

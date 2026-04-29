@@ -70,6 +70,8 @@ export type EventWithVenue = {
   is_featured: boolean | null
   ticket_url: string | null
   source_url: string | null
+  image_url: string | null
+  image_source: 'venue' | 'instagram' | 'manual' | null
   venue: EventVenue | null
   genres: EventGenre[]
   artists: EventArtist[]

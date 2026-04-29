@@ -173,13 +173,26 @@ export default async function EventDetailPage({
         {/* ── Hero ────────────────────────────────────────────────────────── */}
         <section className="relative w-full aspect-[16/9] md:aspect-[21/9] bg-surface-container-highest border-b border-outline-variant">
           <Image
-            src={placeholderImage(event.slug, 1400, 600)}
+            src={event.image_url ?? placeholderImage(event.slug, 1400, 600)}
             alt={eventTitle}
             fill
-            className="object-cover grayscale contrast-125 mix-blend-luminosity opacity-60"
-            unoptimized
+            priority
+            className={event.image_url
+              ? "object-cover opacity-90"
+              : "object-cover grayscale contrast-125 mix-blend-luminosity opacity-60"}
+            unoptimized={!event.image_url}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-background via-background/50 to-transparent" />
+          {/* Attribution badge */}
+          {event.image_url && event.image_source && (
+            <div className="absolute top-3 right-3 bg-background/70 backdrop-blur-sm px-2 py-1 font-mono text-[9px] uppercase tracking-widest text-outline">
+              {event.image_source === 'venue'
+                ? `via ${venue?.name_en ?? 'venue'}`
+                : event.image_source === 'instagram'
+                  ? `via @${artists[0]?.slug ?? 'artist'}`
+                  : 'manual'}
+            </div>
+          )}
 
           <div className="absolute bottom-0 left-0 w-full p-4 md:p-8">
             <div className="flex flex-wrap gap-2 mb-3 md:mb-4">
