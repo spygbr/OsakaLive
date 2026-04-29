@@ -14,10 +14,12 @@
  *        https://osaka-live.vercel.app/api/cron/scrape-events
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { after, type NextRequest } from 'next/server'
+import { NextResponse } from 'next/server'
 import { getAdminClient, runSources } from '@/lib/scraper/v2/runner'
 import { loadSources } from '@/lib/scraper/v2/sources'
 import { loadVenueIndex } from '@/lib/scraper/v2/venue-resolver'
+import { triggerCronStep } from '@/lib/pipeline/artist-pipeline'
 
 export const maxDuration = 60
 // Pin cron egress to Tokyo. Several JP venues (sunhall.jp) silently drop
@@ -59,6 +61,12 @@ export async function GET(req: NextRequest) {
     }
 
     console.log('[cron] scrape-events:', JSON.stringify(summary))
+
+    // ── Chain: kick off artist pipeline after a successful scrape ──────────
+    if (summary.ok && summary.succeeded > 0) {
+      after(() => triggerCronStep('/api/cron/extract-artists', process.env.CRON_SECRET))
+    }
+
     return NextResponse.json(summary)
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
