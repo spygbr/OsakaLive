@@ -223,6 +223,12 @@ export type RunOptions = {
   venueIndex?: VenueIndex
   /** Override Supabase client (testing). */
   supabase?: SupabaseClient
+  /**
+   * Write a scrape_logs row after this source completes. Default: true.
+   * runSources sets this to false so it can batch all logs in one insert
+   * at the end of the cycle instead of one round-trip per source.
+   */
+  persistLog?: boolean
 }
 
 /**
@@ -346,7 +352,7 @@ export async function runSource(
     console.error(`[runner] ${source.id} failed:`, e)
   } finally {
     result.durationMs = Date.now() - t0
-    await writeScrapeLog(supabase, result)
+    if (opts.persistLog !== false) await writeScrapeLog(supabase, result)
   }
 
   return result
@@ -365,9 +371,28 @@ export async function runSources(
   async function worker() {
     while (i < sources.length) {
       const idx = i++
-      results[idx] = await runSource(sources[idx], { supabase, venueIndex })
+      // persistLog: false — we batch all rows in one insert below.
+      results[idx] = await runSource(sources[idx], { supabase, venueIndex, persistLog: false })
     }
   }
   await Promise.all(Array.from({ length: Math.min(concurrency, sources.length) }, worker))
+
+  // One insert for the whole cycle instead of N sequential round-trips.
+  const logRows = results.map((r) => ({
+    source_id: r.sourceId,
+    status: r.status,
+    fetched: r.fetched,
+    parsed: r.parsed,
+    rejected: r.rejected,
+    unresolved: r.unresolved,
+    upserted: r.upserted,
+    duration_ms: r.durationMs,
+    error_message: r.errorMessage ?? null,
+  }))
+  if (logRows.length > 0) {
+    const { error } = await supabase.from('scrape_logs').insert(logRows)
+    if (error) console.warn(`[runner] batch scrape_logs insert: ${error.message}`)
+  }
+
   return results
 }
