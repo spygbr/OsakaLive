@@ -3,7 +3,7 @@ import { Sidebar } from "@/components/Sidebar";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronRight, ExternalLink, Instagram } from "lucide-react";
+import { ChevronRight, ExternalLink, Instagram, Music } from "lucide-react";
 import { getArtistBySlug, getAllArtistSlugs } from "@/lib/supabase/queries";
 import {
   placeholderImage,
@@ -66,7 +66,7 @@ export default async function ArtistDetailPage({
     ...(artist.bio_en && { description: artist.bio_en }),
     url: `https://osaka-live.net/artists/${artist.slug}`,
     ...(artist.image_url && { image: artist.image_url }),
-    sameAs: [artist.website_url, artist.instagram_url].filter(Boolean),
+    sameAs: [artist.website_url, artist.instagram_url, artist.music_url].filter(Boolean),
   };
 
   return (
@@ -137,6 +137,17 @@ export default async function ArtistDetailPage({
                 >
                   <Instagram className="w-3 h-3" />
                   INSTAGRAM
+                </a>
+              )}
+              {artist.music_url && (
+                <a
+                  href={artist.music_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1.5 bg-surface-container border border-outline-variant px-3 py-3 md:py-1.5 min-h-[44px] font-mono text-[10px] uppercase tracking-widest hover:border-primary hover:text-primary transition-colors"
+                >
+                  <Music className="w-3 h-3" />
+                  MUSIC
                 </a>
               )}
             </div>

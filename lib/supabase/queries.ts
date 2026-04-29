@@ -85,6 +85,7 @@ export type ArtistWithGenre = {
   image_url: string | null
   website_url: string | null
   instagram_url: string | null
+  music_url: string | null
   genre: { name_en: string; slug: string } | null
 }
 
