@@ -344,41 +344,6 @@ export default async function Home() {
           </Link>
         </section>
 
-        {/* ── Desktop: Browse by District ─────────────────────────────────── */}
-        <section className="hidden md:block border-t-2 border-outline-variant bg-surface p-6">
-          <div className="mb-6">
-            <h3 className="font-headline font-black text-2xl tracking-tighter uppercase">
-              {t('home_browseSubtitle')}
-            </h3>
-            <div className="h-1 w-24 bg-primary mt-1" />
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            {[
-              { num: "01", en: "NAMBA",        ja: "難波",   slug: "namba" },
-              { num: "02", en: "SHINSAIBASHI", ja: "心斎橋", slug: "shinsaibashi" },
-              { num: "03", en: "UMEDA",        ja: "梅田",   slug: "umeda" },
-            ].map((area) => (
-              <Link
-                key={area.en}
-                href={`/search?area=${area.slug}`}
-                className="aspect-square bg-surface-container border border-outline-variant p-4 flex flex-col justify-between hover:bg-primary group transition-all"
-              >
-                <span className="font-headline font-black text-4xl text-outline-variant group-hover:text-on-primary/20">
-                  {area.num}
-                </span>
-                <div className="text-right">
-                  <p className="font-headline font-bold text-lg leading-none group-hover:text-on-primary uppercase">
-                    {lang === 'ja' ? area.ja : area.en}
-                  </p>
-                  <p className="text-[10px] font-mono text-outline group-hover:text-on-primary/70 uppercase">
-                    {lang === 'ja' ? area.en : area.ja}
-                  </p>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </section>
-
       </main>
     </>
   );
