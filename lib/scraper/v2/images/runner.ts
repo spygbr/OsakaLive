@@ -186,9 +186,25 @@ async function processEvent(
   // ── Step 1: Venue path ─────────────────────────────────────────────────────
   if (event.source_url) {
     try {
-      const page = await fetchPage(event.source_url, { timeoutMs: FETCH_TIMEOUT })
-      if (!page.notModified && page.body) {
-        candidate = extractBestCandidate(page.body, page.url)
+      // Check if source_url is a direct image (e.g. namba-bears flyer links).
+      // A HEAD probe is cheaper than fetching the full page.
+      const head = await fetch(event.source_url, {
+        method: 'HEAD',
+        headers: { 'User-Agent': OL_UA },
+        signal: AbortSignal.timeout(10_000),
+        redirect: 'follow',
+      })
+      const ct = head.ok ? (head.headers.get('content-type') ?? '') : ''
+
+      if (head.ok && ct.startsWith('image/')) {
+        // Direct image URL — use it as the candidate without HTML extraction
+        candidate = { url: event.source_url, source: 'venue', score: 100 }
+      } else {
+        // Regular HTML page — fetch and extract best image candidate
+        const page = await fetchPage(event.source_url, { timeoutMs: FETCH_TIMEOUT })
+        if (!page.notModified && page.body) {
+          candidate = extractBestCandidate(page.body, page.url)
+        }
       }
     } catch {
       // Fall through to IG

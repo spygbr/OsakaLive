@@ -469,13 +469,13 @@ export default async function EventDetailPage({
                         {t("event_venueWebsite")}
                       </a>
                     )}
-                    {event.source_url && (
+                    {event.source_url && !/\.(jpe?g|png|webp|gif|svg)(\?.*)?$/i.test(event.source_url) && (
                       <a
                         href={event.source_url}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="flex-1 border border-outline-variant py-2 font-headline font-bold text-[10px] uppercase tracking-widest hover:bg-surface-container hover:border-primary hover:text-primary transition-colors text-center flex items-center justify-center gap-1"
-                        title="View original event listing source"
+                        title="View original event listing"
                       >
                         <ExternalLink className="w-3 h-3 shrink-0" />
                         Source

@@ -22,6 +22,7 @@ import { UnionwaySource } from './unionway'
 import { VenueScheduleSource } from './venue'
 import { ClubJouleSource } from './club-joule'
 import { DropSource } from './drop'
+import { NambaBearesSource } from './namba-bears'
 
 type SourceRowDb = {
   id: string
@@ -44,8 +45,9 @@ const SOURCE_REGISTRY: Record<string, (row: SourceRowDb) => Source> = {
   udiscover:        (_row) => new UDiscoverSource(),
   unionway:         (_row) => new UnionwaySource(),
   // Custom-parser venue overrides
-  'venue:club-joule': (row) => new ClubJouleSource({ baseUrl: row.base_url, venueId: row.venue_id! }),
-  'venue:drop':       (row) => new DropSource({ baseUrl: row.base_url, venueId: row.venue_id! }),
+  'venue:club-joule':   (row) => new ClubJouleSource({ baseUrl: row.base_url, venueId: row.venue_id! }),
+  'venue:drop':         (row) => new DropSource({ baseUrl: row.base_url, venueId: row.venue_id! }),
+  'venue:namba-bears':  (row) => new NambaBearesSource({ baseUrl: row.base_url, venueId: row.venue_id! }),
 }
 
 export async function loadSources(supabase: SupabaseClient): Promise<Source[]> {
